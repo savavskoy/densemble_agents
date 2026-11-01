@@ -1,0 +1,55 @@
+/.idea/
+
+# Local credentials
+/secrets.local.json
+
+# Python bytecode (agent/tools scripts)
+__pycache__/
+
+# Dependencies, builds, and local tooling
+node_modules/
+dist/
+coverage/
+.cache/
+*.tsbuildinfo
+.DS_Store
+
+# Private configuration and credentials
+/.npmrc
+.env
+.env.*
+!.env.example
+*.local.*
+# Placeholder template, no real values
+!/workspace-template/secrets.local.example.json
+/config.json
+/config/
+/secrets/
+*.pem
+*.key
+
+# Runtime state, attachments, and logs
+/data/
+/runtime/
+/logs/
+*.log
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*
+*.db
+*.db-*
+
+# Scratch files
+/tmp/
+/temp/
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# Speech models are provisioned explicitly (README) and never tracked (GitHub rejects files over 100 MB)
+/models/*
+/.reels-scratch/
+/.scratch-diar/
