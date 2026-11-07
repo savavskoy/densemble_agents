@@ -11,6 +11,8 @@ import {
   REQUIRED_CONTRACTS, safeError, SDK_VERSION, summarize,
 } from "../../src/agents/sdk-gate/contracts.js";
 import type { Check } from "../../src/agents/sdk-gate/contracts.js";
+import { enginePath } from "../../src/platform/engines.js";
+import { currentPlatform } from "../../src/platform/index.js";
 import {
   descendants, IsolatedRuntime, parseProcessList, pinnedCli, processes, runtimeOptions, sameProcess, signalOwned,
 } from "../../src/agents/sdk-gate/runtime.js";
@@ -200,7 +202,7 @@ describe("SDK auth option isolation (offline, not authentication evidence)", () 
       XDG_CONFIG_HOME: join(runRoot, "home", ".config"),
       XDG_CACHE_HOME: join(runRoot, "home", ".cache"),
       TMPDIR: join(runRoot, "scratch"),
-      PATH: `${dirname(process.execPath)}:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin`,
+      PATH: enginePath(currentPlatform()),
       LANG: "en_US.UTF-8",
     });
   });

@@ -9,6 +9,12 @@ import type { RecordingsApi } from "../../src/modules/recordings/api.js";
 import { module as reels } from "../../src/modules/reels/index.js";
 import { entry, fakeCore, fakeLoader, fakeModule } from "../fixtures/modules/index.js";
 
+// Recordings and reels are macOS-only modules for now; their own behaviour is tested on every OS as if on macOS.
+vi.mock("../../src/platform/index.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../src/platform/index.js")>();
+  return { ...actual, currentPlatform: () => ({ ...actual.currentPlatform(), os: "darwin" as const }) };
+});
+
 const FFMPEG = "/opt/homebrew/bin/ffmpeg";
 const FFPROBE = "/opt/homebrew/bin/ffprobe";
 const tools = existsSync(FFMPEG) && existsSync(FFPROBE);

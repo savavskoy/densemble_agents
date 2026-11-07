@@ -1,7 +1,7 @@
-import { copyFileSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   authorizeScope,
   botEngine,
@@ -13,6 +13,7 @@ import {
   secretResolver,
   type LoadedConfig,
   type ServiceConfig,
+  linkedWorkspaces,
   workspacesFor,
 } from "../../src/config/index.js";
 import { SpeechGate } from "../../src/media/speech-gate.js";
@@ -21,6 +22,12 @@ import { createModuleHost } from "../../src/modules/host.js";
 import { createCoreOffer } from "../../src/modules/offer.js";
 import { module } from "../../src/modules/recordings/index.js";
 import { recordingSettings, type RecordingSettings, type RecordingsConfig } from "../../src/modules/recordings/settings.js";
+
+// Recordings and reels are macOS-only modules for now; their own behaviour is tested on every OS as if on macOS.
+vi.mock("../../src/platform/index.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../src/platform/index.js")>();
+  return { ...actual, currentPlatform: () => ({ ...actual.currentPlatform(), os: "darwin" as const }) };
+});
 
 let root: string;
 let source: string;
@@ -61,8 +68,8 @@ beforeEach(() => {
     runtimeDataPath: "./data", runtimeHomePath: "./runtime/copilot", interactiveHomePath: join(root, "interactive"),
     ownerId: 101, skillDirectories: [join(source, "agent/skills")],
     bots: [
-      { id: "bot-one", agentId: "helper-one", tokenRef: "telegram.one" },
-      { id: "bot-two", agentId: "helper-two", tokenRef: "telegram.two" },
+      { id: "bot-one", agentId: "helper-one", tokenRef: "telegram.one", engine: "copilot" },
+      { id: "bot-two", agentId: "helper-two", tokenRef: "telegram.two", engine: "copilot" },
     ],
     bindings: [
       { botId: "bot-one", chatId: 101, topicId: null, kind: "private" },
@@ -250,6 +257,29 @@ describe("private configuration and discovery", () => {
     rmSync(launcher("helper-one"));
     expect(load).toThrow("CANONICAL_WITHOUT_LAUNCHER");
   });
+  it("discovers a self-sufficient AGENT.md without a launcher or launchers directory", () => {
+    rmSync(join(source, ".github"), { recursive: true });
+    delete config.agentLaunchersPath;
+    for (const id of ["helper-two", "helper-three", "helper-four", "helper-five"]) rmSync(join(source, "agent/agents", id), { recursive: true });
+    const canonical = join(source, "agent/agents/helper-one/AGENT.md");
+    write(canonical, "---\nname: helper-one\ndescription: Self-sufficient\nmodel: synthetic-model\n---\n# Instructions\n[skill](../../skills/example/SKILL.md)");
+    config.bots = [{ id: "bot-one", agentId: "helper-one", tokenRef: "telegram.one", engine: "copilot" }];
+    config.bindings = config.bindings.filter((binding) => binding.botId === "bot-one");
+    const agent = load().agents.find((item) => item.id === "helper-one");
+    expect(agent).toMatchObject({ description: "Self-sufficient", defaultModel: "synthetic-model", userInvocable: true, canonicalPath: realpathSync(canonical) });
+    write(canonical, "---\nname: helper-one\ndescription: No model\n---\n# Instructions");
+    expect(load).toThrow("LAUNCHER_METADATA_INVALID");
+    write(canonical, "---\nname: other-name\ndescription: Example\nmodel: test\n---\n# Instructions");
+    expect(load).toThrow("LAUNCHER_ID_MISMATCH");
+    write(canonical, "---\nname: helper-one\ndescription: Example\nmodel: test\n---\n");
+    expect(load).toThrow("CANONICAL_EMPTY");
+    write(canonical, "---\nname: helper-one\ndescription: Example\nmodel: test\n---\n[missing](../../skills/missing/SKILL.md)");
+    expect(load).toThrow("SOURCE_LINK_INVALID");
+  });
+  it("prefers a launcher over the frontmatter of its canonical AGENT.md", () => {
+    write(join(source, "agent/agents/helper-one/AGENT.md"), "---\nname: helper-one\ndescription: Canonical\nmodel: canonical-model\n---\n# Instructions");
+    expect(load().agents.find((item) => item.id === "helper-one")?.defaultModel).toBe("synthetic-model");
+  });
   it("rejects escaping canonical references and links", () => {
     write(launcher("worker"), "---\nname: worker\ndescription: Example\nmodel: test\nuser-invocable: false\n---\nRead `agent/subagents/../../../outside.md`.");
     write(join(root, "outside.md"), "# Outside");
@@ -398,6 +428,21 @@ describe("explicit private/group/forum bindings", () => {
     config.workspaces![1] = { ...config.workspaces![1]!, path: personal, agentIds: ["worker"] };
     expect(load).toThrow(ConfigError);
   });
+  it("accepts links only to other configured workspaces", () => {
+    const [management, tech] = ["knowledge-management", "knowledge-tech"].map((name) => join(root, name));
+    for (const path of [management!, tech!]) mkdirSync(path);
+    config.workspaces = [
+      { id: "management", name: "Management", access: "private", ownerUserId: 101, path: management!,
+        agentIds: ["helper-one"], linkedWorkspaceIds: ["tech"] },
+      { id: "tech", name: "Tech", access: "private", ownerUserId: 101, path: tech!, agentIds: ["helper-one"] },
+    ];
+    expect(linkedWorkspaces(load().config, management!).map((workspace) => workspace.id)).toEqual(["tech"]);
+    expect(linkedWorkspaces(load().config, tech!)).toEqual([]);
+    for (const links of [["missing"], ["management"], ["tech", "tech"]]) {
+      config.workspaces[0]!.linkedWorkspaceIds = links;
+      expect(load).toThrow("WORKSPACE_LINK_INVALID");
+    }
+  });
   it("allows a workspace to share its exact root with agent sources but not an ancestor or descendant", () => {
     const externalSecrets = join(root, "secrets.local.json");
     copyFileSync(join(source, "secrets.local.json"), externalSecrets);
@@ -433,6 +478,14 @@ describe("explicit private/group/forum bindings", () => {
       "---\nname: helper-one\ndescription: Clash\nmodel: synthetic-model\n---\nRead and follow `agent/agents/helper-one/AGENT.md`.");
     expect(load).toThrow("AGENT_DUPLICATE");
   });
+  it("discovers self-sufficient agents in an agentSource workspace without .github", () => {
+    const knowledge = join(root, "knowledge-self");
+    write(join(knowledge, "AGENTS.md"), "# Local rules");
+    write(join(knowledge, "agent/agents/local-pm/AGENT.md"), "---\nname: local-pm\ndescription: Local\nmodel: synthetic-model\n---\n# Local PM");
+    config.workspaces = [{ id: "kb", name: "KB", access: "private", ownerUserId: 101,
+      path: knowledge, agentIds: ["local-pm"], agentSource: true }];
+    expect(load().agents.map((agent) => agent.id)).toContain("local-pm");
+  });
   it("rejects duplicate configured users and unknown bot grants", () => {
     config.users = [
       { telegramUserId: 202, allowedBotIds: ["bot-one"] },
@@ -467,10 +520,18 @@ describe("proactivity configuration defaults and validation", () => {
   });
 });
 describe("per-bot engine selection", () => {
-  it("keeps every bot on Copilot when no engine settings are present", () => {
+  it("keeps explicitly Copilot bots on Copilot without a claudeCode block", () => {
     const loaded = load();
     expect(loaded.config.claudeCode).toBeUndefined();
     expect(loaded.config.bots.map((bot) => botEngine(loaded.config, bot.id))).toEqual(["copilot", "copilot"]);
+  });
+  it("runs a bot without an engine on Claude Code, which then requires a claudeCode block", () => {
+    delete config.bots[0]!.engine;
+    expect(load).toThrow("CLAUDE_CODE_CONFIG_REQUIRED");
+    mkdirSync(join(code, "runtime/claude"), { recursive: true });
+    config.claudeCode = { homePath: "./runtime/claude", defaultModel: "claude-sonnet-5-5" };
+    const loaded = load();
+    expect(loaded.config.bots.map((bot) => botEngine(loaded.config, bot.id))).toEqual(["claude-code", "copilot"]);
   });
   it("requires a claudeCode block for a Claude Code bot", () => {
     config.bots[1] = { ...config.bots[1]!, engine: "claude-code" };

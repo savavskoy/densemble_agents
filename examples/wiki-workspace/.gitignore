@@ -1,0 +1,7 @@
+secrets.local.json
+*.local.*
+.DS_Store
+
+# Raw sources stay local
+/raw/*
+!/raw/README.md

@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { LoadedConfig } from "../../src/config/index.js";
 
+// Recordings and reels are macOS-only modules for now; their own behaviour is tested on every OS as if on macOS.
+vi.mock("../../src/platform/index.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../src/platform/index.js")>();
+  return { ...actual, currentPlatform: () => ({ ...actual.currentPlatform(), os: "darwin" as const }) };
+});
+
 const state = vi.hoisted(() => ({
   authenticated: true, failStart: false, stopped: 0, forced: 0, modelCalls: 0,
   botMethods: [] as string[],
@@ -36,7 +42,7 @@ const config: LoadedConfig = {
   config: { workspacePath: "/synthetic/workspace", agentDefinitionsPath: "/synthetic/workspace/agents",
     agentLaunchersPath: "/synthetic/workspace/launchers", secretsPath: "/synthetic/workspace/secrets.local.json",
     runtimeDataPath: "/synthetic/data", runtimeHomePath: "/synthetic/copilot", skillDirectories: [],
-    ownerId: 1, bots: [{ id: "helper", agentId: "helper", tokenRef: "telegram.helper" }], bindings: [], mcp: { mode: "none" } },
+    ownerId: 1, bots: [{ id: "helper", agentId: "helper", tokenRef: "telegram.helper", engine: "copilot" }], bindings: [], mcp: { mode: "none" } },
   agents: [], tokenForBot: () => "42:synthetic-secret-token", resolveSecret: () => "never log",
 };
 beforeEach(() => {
@@ -94,6 +100,16 @@ describe("engine diagnostics", () => {
     const report = await doctor(claudeConfig, { claudeHost: host({ authenticated: false }) });
     expect(report.checks).toContainEqual({ component: "claude-authentication", ready: false, code: "CLAUDE_LOGIN_REQUIRED" });
     expect(report.checks.some((check) => check.component === "claude-models")).toBe(false);
+  });
+  it("skips Copilot checks when every bot runs on Claude Code, including the default engine", async () => {
+    state.authenticated = false;
+    const claudeOnly: LoadedConfig = { ...claudeConfig, config: { ...claudeConfig.config,
+      bots: [{ id: "claude-helper", agentId: "helper", tokenRef: "telegram.helper" }] } };
+    const report = await doctor(claudeOnly, { claudeHost: host({}) });
+    expect(report.checks).toContainEqual({ component: "bot-engine:claude-helper", ready: true, code: "ENGINE_CLAUDE_CODE" });
+    expect(report.checks).toContainEqual({ component: "claude-authentication", ready: true, code: "AUTHENTICATED" });
+    expect(report.checks.some((check) => ["runtime", "authentication", "models"].includes(check.component))).toBe(false);
+    expect(state.stopped + state.forced).toBe(0);
   });
 });
 describe("recording transcription diagnostics", () => {

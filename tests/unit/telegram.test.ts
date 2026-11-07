@@ -104,7 +104,7 @@ beforeEach(() => {
   adapters = [];
   config = {
     config: {
-      ownerId: 101, bots: [{ id: "bot-one", agentId: "first", tokenRef: "synthetic" }],
+      ownerId: 101, bots: [{ id: "bot-one", agentId: "first", tokenRef: "synthetic", engine: "copilot" }],
       bindings: [
         { botId: "bot-one", chatId: 101, kind: "private", topicId: null },
         { botId: "bot-one", chatId: -201, kind: "group", topicId: null },
@@ -309,7 +309,7 @@ describe("durable ordered polling with actual grammY API", () => {
       { timeout: 2000 });
   });
   it("disables only a bot whose command registration reports an invalid token", async () => {
-    config.config.bots.push({ id: "bot-two", agentId: "first", tokenRef: "other" });
+    config.config.bots.push({ id: "bot-two", agentId: "first", tokenRef: "other", engine: "copilot" });
     config.config.bindings.push({ botId: "bot-two", chatId: 101, kind: "private", topicId: null });
     config.tokenForBot = (id) => id === "bot-one" ? "701:synthetic_token" : "702:synthetic_token";
     const first = fakeApi({ setMyCommands: () => { throw apiError(401); } });
@@ -377,7 +377,7 @@ describe("durable ordered polling with actual grammY API", () => {
     expect(store.inbox.queued()[0]?.messages.map((entry) => entry.text)).toEqual(["caption1", "caption2"]);
   });
   it("reports webhook and 409 conflicts independently without deleting a webhook", async () => {
-    config.config.bots.push({ id: "bot-two", agentId: "second", tokenRef: "other" });
+    config.config.bots.push({ id: "bot-two", agentId: "second", tokenRef: "other", engine: "copilot" });
     config.config.bindings.push({ botId: "bot-two", chatId: 101, kind: "private", topicId: null });
     config.tokenForBot = (id) => id === "bot-one" ? "701:synthetic_token" : "702:synthetic_token";
     const first = fakeApi({ getWebhookInfo: () => ({ url: "https://example.invalid/webhook" }) });
@@ -390,7 +390,7 @@ describe("durable ordered polling with actual grammY API", () => {
     expect([...first.calls, ...second.calls].some((call) => call.method === "deleteWebhook")).toBe(false);
   });
   it.each([401, 409])("keeps a healthy bot polling after another bot's %i error", async (code) => {
-    config.config.bots.push({ id: "bot-two", agentId: "second", tokenRef: "other" });
+    config.config.bots.push({ id: "bot-two", agentId: "second", tokenRef: "other", engine: "copilot" });
     config.config.bindings.push({ botId: "bot-two", chatId: 101, kind: "private", topicId: null });
     config.tokenForBot = (id) => id === "bot-one" ? "701:synthetic_token" : "702:synthetic_token";
     const first = fakeApi({ [code === 401 ? "getMe" : "getUpdates"]: () => { throw apiError(code); } });
@@ -408,7 +408,7 @@ describe("durable ordered polling with actual grammY API", () => {
     expect(diagnostics.record).toHaveBeenCalledWith("TG_BOT_IDENTITY_MISMATCH", { botId: "bot-one" });
     expect(fake.calls.some((call) => call.method === "getUpdates")).toBe(false);
     expect(fake.calls.some((call) => call.method === "setMyCommands")).toBe(false);
-    config.config.bots.push({ id: "bot-two", agentId: "second", tokenRef: "other" });
+    config.config.bots.push({ id: "bot-two", agentId: "second", tokenRef: "other", engine: "copilot" });
     const dup = fakeApi();
     await adapter(dup.api).start({ handle: async () => undefined });
     expect(dup.calls).toHaveLength(0);

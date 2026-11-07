@@ -25,7 +25,7 @@ it.skipIf(process.env.DENSEMBLE_RUNTIME_SMOKE !== "1")(
         workspacePath: workspace, agentDefinitionsPath: workspace, agentLaunchersPath: workspace,
         runtimeDataPath: data, runtimeHomePath: home, secretsPath: join(root, "secrets.local.json"),
         skillDirectories: [workspace], ownerId: scope.ownerId,
-        bots: [{ id: scope.botId, agentId: "synthetic-agent", tokenRef: "unused" }],
+        bots: [{ id: scope.botId, agentId: "synthetic-agent", tokenRef: "unused", engine: "copilot" }],
         bindings: [{ botId: scope.botId, chatId: scope.chatId, topicId: null, kind: "private" }], mcp: { mode: "none" },
       },
       agents: [{ id: "synthetic-agent", defaultModel: "not-selected", description: "Synthetic lifecycle fixture",

@@ -5,11 +5,15 @@ import { loadConfig, moduleEntries } from "./config/index.js";
 import { checkedPath, isWithin } from "./config/paths.js";
 import { parseArguments } from "./operations/arguments.js";
 import { createDiagnostics } from "./operations/diagnostics.js";
+import { assertNotRoot, assertStateMounted } from "./platform/environment.js";
+import { currentPlatform, UNSUPPORTED_PLATFORM_HINT } from "./platform/index.js";
 
 const diagnostics = createDiagnostics();
 const codeRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 async function main(): Promise<void> {
+  const platform = currentPlatform();
+  assertNotRoot();
   const args = parseArguments(process.argv.slice(2));
   if (!existsSync(args.config)) {
     process.stderr.write("Densemble is not configured. Create a private config.local.json from config.example.json; credentials stay in your external secrets.local.json.\n");
@@ -18,19 +22,29 @@ async function main(): Promise<void> {
   }
   if (process.versions.node.split(".")[0] !== "24") throw new Error("NODE_24_REQUIRED");
   const config = loadConfig(args.config, { codeRoot });
+  assertStateMounted(platform, [config.config.runtimeDataPath, config.config.runtimeHomePath,
+    ...(config.config.claudeCode ? [config.config.claudeCode.homePath] : [])]);
   if (args.target) {
     const target = resolve(args.target);
     const parent = checkedPath(dirname(target), "directory");
     if (isWithin(codeRoot, parent)) throw new Error("BACKUP_OUTSIDE_CODE_REQUIRED");
   }
-  if (args.command === "launchd") {
-    const { launchdTemplate } = await import("./operations/launchd.js");
+  if (args.command === "launchd" || args.command === "service-unit") {
+    const { serviceUnit } = await import("./platform/service-unit.js");
     const logs = join(config.config.runtimeDataPath, "logs");
     mkdirSync(logs, { recursive: true, mode: 0o700 });
     checkedPath(logs, "directory");
-    process.stdout.write(launchdTemplate({
+    process.stdout.write(serviceUnit(platform, {
       node: process.execPath, codeRoot, config: resolve(args.config), logs,
     }));
+    return;
+  }
+  if (args.command === "login") {
+    // Holding the instance lock keeps a running service from reading a half-written login.
+    const { acquireProcessLock } = await import("./storage/process-lock.js");
+    const { loginCommand, runLogin } = await import("./operations/login.js");
+    const lock = acquireProcessLock(config.config.runtimeDataPath);
+    try { process.exitCode = await runLogin(await loginCommand(config, args.engine!, platform)); } finally { lock.release(); }
     return;
   }
   if (args.command === "recordings-status") {
@@ -109,6 +123,7 @@ async function main(): Promise<void> {
 void main().catch((error: unknown) => {
   const code = error instanceof Error && /^[A-Z][A-Z0-9_]{0,95}$/.test(error.message)
     ? error.message : "SERVICE_OPERATION_FAILED";
+  if (code === "PLATFORM_UNSUPPORTED") process.stderr.write(UNSUPPORTED_PLATFORM_HINT);
   diagnostics.record(code);
   process.exitCode = 1;
 });

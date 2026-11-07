@@ -33,7 +33,7 @@ it("wires authorized durable Telegram ingress through document workers, runtime 
   const config: LoadedConfig = {
     config: { workspacePath: workspace, agentDefinitionsPath: workspace, agentLaunchersPath: workspace,
       secretsPath: join(workspace, "secrets.local.json"), runtimeDataPath: data, runtimeHomePath: home,
-      skillDirectories: [], ownerId: 101, bots: [{ id: "helper", agentId: "helper", tokenRef: "telegram.helper" }],
+      skillDirectories: [], ownerId: 101, bots: [{ id: "helper", agentId: "helper", tokenRef: "telegram.helper", engine: "copilot" }],
       bindings: [{ botId: "helper", chatId: 101, topicId: null, kind: "private" }], mcp: { mode: "none" } },
     agents: [{ id: "helper", description: "Synthetic", defaultModel: "example", userInvocable: true,
       canonicalPath: canonical, launcherPath: canonical }],

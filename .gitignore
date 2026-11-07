@@ -2,6 +2,7 @@
 
 # Local credentials
 /secrets.local.json
+.agent-craft/
 
 # Python bytecode (agent/tools scripts)
 __pycache__/
@@ -20,8 +21,6 @@ coverage/
 .env.*
 !.env.example
 *.local.*
-# Placeholder template, no real values
-!/workspace-template/secrets.local.example.json
 /config.json
 /config/
 /secrets/

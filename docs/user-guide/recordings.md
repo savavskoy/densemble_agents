@@ -32,8 +32,8 @@ itself, and Telegram voice messages always go first (see [below](#voice-messages
 
 ## Before you start
 
-- A Mac with Apple Silicon and Densemble already running (see
-  [INSTALL.md](../../INSTALL.md)).
+- A Mac with Apple Silicon and Densemble already running (see the main
+  [native setup](../native-setup.md)).
 - FFmpeg and whisper.cpp installed, for example with Homebrew:
   `brew install ffmpeg whisper-cpp`. If voice messages already work in Telegram,
   you have them.
@@ -57,7 +57,10 @@ curl -fL -o models/ggml-silero-v5.1.2.bin https://huggingface.co/ggml-org/whispe
 ```
 
 The first is the speech model; the second detects where speech is, so silence and
-music are skipped.
+music are skipped. Densemble cuts the speech into pieces of up to 25 seconds and
+recognises each piece separately, so no sentence is skipped; this takes about
+3–4 minutes per hour of recording. It needs `whisper-vad-speech-segments`, which
+comes with whisper.cpp next to `whisper-cli` (`brew install whisper-cpp` installs both).
 
 Optional, for [new transcripts](#asking-for-a-new-transcript): the full
 `ggml-large-v3` model (about 3 GB more). It is slower but more accurate, and is

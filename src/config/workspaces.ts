@@ -20,6 +20,7 @@ export const workspaceSchema = z.object({
   path: nonempty,
   agentIds: z.array(id).min(1),
   agentSource: z.boolean().optional(),
+  linkedWorkspaceIds: z.array(id).optional(),
 }).strict();
 
 export type ConfiguredUser = z.infer<typeof userSchema>;
@@ -68,6 +69,15 @@ export function authorizedWorkspace(
 ): WorkspaceDefinition | typeof DEFAULT_WORKSPACE_ID | null {
   if (userId === config.ownerId && path === config.workspacePath) return DEFAULT_WORKSPACE_ID;
   return workspacesFor(config, userId, botId).find((workspace) => workspace.path === path) ?? null;
+}
+
+/**
+ * Workspaces linked to the one at `path`: sessions there may also use their folders. Linking is not
+ * membership and is not a security boundary; read-only access must come from the operating system.
+ */
+export function linkedWorkspaces(config: Pick<WorkspaceConfig, "workspaces">, path: string): WorkspaceDefinition[] {
+  const workspace = (config.workspaces ?? []).find((entry) => entry.path === path);
+  return (config.workspaces ?? []).filter((entry) => workspace?.linkedWorkspaceIds?.includes(entry.id));
 }
 
 /** Private chats of configured users are conversations of that user; everything else stays owner-owned. */
@@ -128,6 +138,12 @@ export function resolveWorkspaces(
       if (isWithin(other.path, path) || isWithin(path, other.path)) throw new ConfigError("WORKSPACE_PATH_SHARED");
     }
     resolved.push({ ...definition, path });
+  }
+  for (const definition of resolved) {
+    const links = definition.linkedWorkspaceIds ?? [];
+    if (new Set(links).size !== links.length || links.some((link) => link === definition.id || !ids.has(link))) {
+      throw new ConfigError("WORKSPACE_LINK_INVALID");
+    }
   }
   return resolved;
 }

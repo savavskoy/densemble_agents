@@ -1,5 +1,6 @@
 import { lstatSync, realpathSync, statSync } from "node:fs";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
+import { PATH_SEPARATOR } from "../platform/index.js";
 
 export class ConfigError extends Error {
   readonly code: string;
@@ -12,7 +13,7 @@ export class ConfigError extends Error {
 
 export function isWithin(root: string, path: string): boolean {
   const rel = relative(root, path);
-  return rel === "" || (rel !== ".." && !rel.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`) && !isAbsolute(rel));
+  return rel === "" || (rel !== ".." && !rel.startsWith(`..${PATH_SEPARATOR}`) && !isAbsolute(rel));
 }
 
 export function checkedPath(path: string, kind: "file" | "directory" | "any"): string {

@@ -3,7 +3,9 @@ import { userInfo } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { LoadedConfig } from "../config/index.js";
+import { claudePackage, enginePath } from "../platform/engines.js";
 import { RuntimeError } from "./contracts.js";
+import { enginePlatform } from "./platform.js";
 
 export const CLAUDE_SDK_VERSION = "0.3.305";
 export const CLAUDE_CODE_VERSION = "2.1.305";
@@ -19,11 +21,11 @@ export function claudeHome(config: LoadedConfig): string {
 
 /** Resolve the pinned native binary bundled with the pinned SDK, never a global `claude` launcher. */
 export async function pinnedClaudePath(): Promise<string> {
-  if (process.platform !== "darwin" || process.arch !== "arm64") throw new RuntimeError("RUNTIME_REQUIRES_MACOS_ARM64");
+  const platform = enginePlatform();
   let manifest: string;
   let sdkEntry: string;
   try {
-    manifest = fileURLToPath(import.meta.resolve("@anthropic-ai/claude-agent-sdk-darwin-arm64/package.json"));
+    manifest = fileURLToPath(import.meta.resolve(`${claudePackage(platform)}/package.json`));
     sdkEntry = fileURLToPath(import.meta.resolve("@anthropic-ai/claude-agent-sdk"));
   } catch { throw new RuntimeError("CLAUDE_ENGINE_UNAVAILABLE"); }
   const native = JSON.parse(await readFile(manifest, "utf8")) as { version: string };
@@ -39,16 +41,25 @@ export async function pinnedClaudePath(): Promise<string> {
   return binary;
 }
 
+/**
+ * The account name the Claude login is stored under (the macOS Keychain looks it up by name). A container may
+ * run under a UID with no passwd entry, where `userInfo()` throws; the login is then a file and any name works.
+ */
+export function serviceUser(): string {
+  try { return userInfo().username; } catch { return process.env.USER || "densemble"; }
+}
+
 /** A complete environment: nothing ambient (API keys, tokens, interactive config dirs) is inherited. */
 export function claudeEnvironment(config: LoadedConfig): Record<string, string> {
   const home = process.env.HOME;
   if (!home) throw new RuntimeError("AUTH_HOME_REQUIRED");
   // The macOS Keychain login is looked up by account name; without USER the service login is invisible.
-  const user = userInfo().username;
+  // On Linux the login is a file in CLAUDE_CONFIG_DIR, and USER is harmless.
+  const user = serviceUser();
   return {
     HOME: home, USER: user, LOGNAME: user, CLAUDE_CONFIG_DIR: claudeHome(config),
     TMPDIR: join(config.config.runtimeDataPath, "scratch"),
-    PATH: `${dirname(process.execPath)}:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin`,
+    PATH: enginePath(enginePlatform()),
     LANG: "en_US.UTF-8", GH_PROMPT_DISABLED: "1",
     DISABLE_AUTOUPDATER: "1", DISABLE_TELEMETRY: "1",
     CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1", CLAUDE_CODE_DISABLE_BUNDLED_SKILLS: "1",

@@ -25,6 +25,8 @@ const settingsFix = "Виправте modules.recordings.settings.path у config
 export const module: ModuleDefinition<RecordingsConfig, RecordingsApi> = {
   id: "recordings",
   version: "1.1.0",
+  // Relies on macOS tools (lsof, osascript, ps -o pgid) and Homebrew paths; Linux comes in a later stage.
+  platforms: ["darwin"],
   settings: recordingsSchema,
   abilities: [{
     name: "recordings_status",

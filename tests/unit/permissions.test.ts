@@ -135,7 +135,7 @@ describe("opaque permission and form controls", () => {
     await f.app.drain();
     expect(f.commands.some((command) => command.kind === "answer")).toBe(false);
   });
-  it("rejects expired callbacks and form cancellation stops its native wait", async () => {
+  it("rejects expired callbacks", async () => {
     const f = setup({ requestTimeoutMs: 15 });
     await f.app.handle(f.message()); await f.app.drain();
     const run = f.store.runs.active(scope)!;
@@ -144,6 +144,13 @@ describe("opaque permission and form controls", () => {
     await new Promise((done) => setTimeout(done, 20));
     await f.click("Дозволити один раз"); await f.app.drain();
     expect(f.commands.some((command) => command.kind === "answer")).toBe(false);
+  });
+
+  it("form cancellation stops its native wait", async () => {
+    // Default request timeout: on a loaded machine a 15 ms one could expire before the click.
+    const f = setup();
+    await f.app.handle(f.message()); await f.app.drain();
+    const run = f.store.runs.active(scope)!;
     f.emit({ ...run, kind: "request", requestId: "cancel", payload: { kind: "question", fields: [
       { id: "answer", prompt: "Відповідь", choices: [], multiple: false, allowFreeform: true },
     ] } });

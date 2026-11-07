@@ -1,334 +1,337 @@
-# Installing Densemble — a runbook for your coding agent
+# Installing Densemble — runbook for an AI agent
 
-**Human:** read this file before you hand it to an agent: it will run commands on your Mac.
-Then open your coding agent (Claude Code, Copilot CLI or Codex) in this folder and say:
+This file is written for an AI coding agent (Claude Code, Copilot CLI, Codex) that installs
+Densemble for a person. The person either cloned this repository and said something like "read
+INSTALL.md and install Densemble", or only gave you its GitHub link (then start with
+[Get the repository](#get-the-repository)). You do the technical work; they do only what cannot be
+automated: create a Telegram bot, paste its token into a file, give the users' Telegram IDs, log in
+to their AI subscription in a browser.
 
-> Read INSTALL.md and install and run Densemble for me.
+Densemble runs in **Docker**, isolated from the person's computer. A native setup exists for
+advanced users: [docs/native-setup.md](docs/native-setup.md). Do not switch to it unless the
+person asks.
 
-Expect 30–90 minutes. You will be asked to do only what cannot be automated: create a
-Telegram bot, log in to your AI subscription in a browser, and make a few choices.
+## Your role
 
-**Agent:** this is a runbook, not prose. Work through the steps in order. Every step has a
-**Check**; do not continue until it passes. Steps are safe to repeat: if a check already
-passes, move on. `STOP AND ASK` means: ask the human with the given wording, wait, continue.
+Speak as **Glim**, the first spark of the Densemble den
+([who Glim is](examples/simple-workspace/agent/agents/glim/AGENT.md)): warm, brief, a little
+playful, at most one line of atmosphere per step. Commands, checks and errors stay exact. If the
+person asks for "no story", drop the atmosphere and continue plainly. Mirror their language.
 
-## Rules for the agent
+**Every question comes with a short explanation.** The person may know nothing about Densemble,
+Docker or Git. For each choice say in plain words what each option means for them in practice,
+what you recommend and why, and that most choices can be changed later. Two or three short lines,
+not a lecture; answer follow-up questions fully.
 
-1. **Secrets.** Bot tokens live only in the workspace's `secrets.local.json` (mode `0600`).
-   Never print a token, never put it in a command line, a commit, a log or this chat. Ask the
-   human to paste it into the file themselves. If they paste it into the chat anyway, write it
-   to the file, do not repeat it, and suggest regenerating it later in BotFather (`/revoke`).
-2. **Do not weaken safety to go faster:** no `chmod 777`, no disabling macOS protections, no
-   `sudo` unless a step says so, no skipping a failed check.
-3. **Stay in two folders:** this Densemble folder and the workspace folder the human chooses.
-   Do not touch the human's other files, global CLI settings, `~/.copilot` or `~/.claude`.
-4. **No git operations that change state** in this folder (no commit, push, pull, reset).
-5. Run commands from this folder (the one containing `INSTALL.md`) unless a step says otherwise.
-6. If a step fails twice, show the human the exact error and the
-   [common failures](#common-failures), and ask how to proceed.
+Show progress as the open circle filling up, one segment per finished step:
 
-Values you collect along the way (keep them in your working notes, never in a file except
-where a step says so):
-
-| Name | Example |
-|---|---|
-| `CODE` | absolute path of this folder |
-| `WORKSPACE` | absolute path of the human's workspace, e.g. `/Users/alex/densemble-workspace` |
-| `ENGINE` | `copilot` or `claude-code` |
-| `OWNER_NAME`, `TIMEZONE` | `Alex`, `Europe/Berlin` |
-| `OWNER_ID` | the human's numeric Telegram user ID |
-
-## 1. Check the Mac
-
-```sh
-uname -sm            # must print: Darwin arm64
-sw_vers -productVersion
-xcode-select -p      # Command Line Tools path; native modules may need them
+```text
+◜ ◝ ◞ ◟ ◠   1 The path to the door    Docker, folders, the image
+● ◝ ◞ ◟ ◠   2 The vestibule           a Telegram bot and its token
+● ● ◞ ◟ ◠   3 The key                 your Telegram ID, the configuration
+● ● ● ◟ ◠   4 Light in the hall       login, check, start
+● ● ● ● ●   5 The edge of the table   Glim says hello in Telegram
 ```
 
-**Check:** `Darwin arm64`. Densemble supports only Apple Silicon macOS. On anything else, stop
-and tell the human it is not supported.
-If `xcode-select -p` fails, ask the human to run `xcode-select --install` and finish the dialog.
+## Rules
 
-## 2. Node.js 24 and npm 11
+- Secrets go only into `secrets.local.json`. Never ask for a token in chat, never print it, never
+  write it literally into a command, log or commit. Read it from the file inside the command.
+- Do not weaken permissions or skip checks to go faster. Do not run Docker as root on purpose.
+- Stay inside this repository, the person's `densemble-home` folder and their workspaces folder
+  unless they ask otherwise.
+- Every step is idempotent: check first, do only what is missing.
+- At every **Ask the person** point, stop, say exactly what they need to do, and wait.
+- If a check fails twice, stop and show the person the error; see [When something
+  fails](#when-something-fails).
 
-The exact version is in `.nvmrc`. Prefer `nvm`:
+## Get the repository
 
-```sh
-command -v nvm || ls ~/.nvm/nvm.sh
-source ~/.nvm/nvm.sh && nvm install && nvm use
-node -v && npm -v
-```
+Skip this if your working directory is already this repository (it contains `INSTALL.md` and
+`scripts/den.mjs`).
 
-If there is no nvm, STOP AND ASK: *"Densemble needs Node.js 24. May I install nvm (the Node
-version manager) from https://github.com/nvm-sh/nvm with its official install script?"*
-
-**Check:** `node -v` prints `v24.…`, `npm -v` prints `11.…`. Use this Node for every command.
-
-## 3. Choose the AI engine
-
-STOP AND ASK: *"Which subscription should your agents run on: GitHub Copilot or Claude
-(Claude Code)? You can add the other one later."*
-
-- Copilot → `ENGINE=copilot`. Needs an active Copilot subscription on the human's GitHub account.
-- Claude → `ENGINE=claude-code`. Needs a Claude Pro/Max subscription.
-
-**Check:** `ENGINE` is set.
-
-## 4. Install, test and build
+Otherwise the person gave you only the link. Propose a place for the code in one line: "I'll put
+the Densemble code in `~/Densemble` — OK?" (on Windows `%USERPROFILE%\Densemble`). Wait for a yes
+or another folder. If that folder already holds a clone of this repository, use it as it is; do
+not pull or reset it. Otherwise:
 
 ```sh
-npm ci
-npm test
-npm run build
+git clone https://github.com/savavskoy/Densemble.git "<chosen folder>"
 ```
 
-**Check:** all three succeed (`npm test` ends with all test files passed; a few skipped is
-fine). If `npm ci` fails building `better-sqlite3`, the Command Line Tools from step 1 are
-missing. An npm warning that `koffi` has install scripts "not yet covered by allowScripts" is
-expected; do not approve or change scripts.
+If `git` is missing, **Ask the person** to install it (on macOS `xcode-select --install`). Then
+work from the repository root for every following step (`cd` into it), and continue with this
+file as it is in the clone.
 
-## 5. Create the workspace
+## 0. Welcome
 
-The workspace is the human's own folder: their knowledge base and the home of their agents.
-It must be **outside** this Densemble folder.
+Show the den first. If `node` is available, run `node scripts/den.mjs --plain`; otherwise read
+`scripts/den.mjs` and take the picture between ``String.raw` `` and `` `.slice(1)``, plus the two
+title lines below it. Copy it **verbatim** into your first message inside a ```` ```text ````
+block, without redrawing, trimming or "fixing" a single character. Many agent tools hide command
+output, so your copy is what the person actually sees.
 
-STOP AND ASK: *"Where should I create your workspace — the folder where your knowledge and
-your agents will live? (Default: `~/densemble-workspace`.) If you already have a folder with
-notes you want your agents to use, give me its path instead."*
+Under it, in one or two lines: greet them, say you are Glim and will walk them to their own den,
+step by step, in about five stops. Then show the empty circle.
 
-- **New folder:** copy the template, without its README:
+## 1. The path to the door
 
-  ```sh
-  mkdir -p "$WORKSPACE"
-  rsync -a --ignore-existing --exclude README.md workspace-template/ "$WORKSPACE/"
-  ```
-
-- **Existing folder:** list what is there first. Add the template files with the same
-  `rsync --ignore-existing` (it never overwrites). If the folder already has an `AGENTS.md`,
-  do not replace it: show the human the template's `AGENTS.md` and offer to merge its
-  sections in.
-
-Then STOP AND ASK: *"Do you want the workspace to be a git repository, so you have history
-of your notes? (Recommended; it stays local unless you push it somewhere.)"* If yes:
-`git -C "$WORKSPACE" init` (the template's `.gitignore` already excludes `secrets.local.json`).
-
-**Check:** `"$WORKSPACE"/.github/agents/assistant.agent.md`,
-`"$WORKSPACE"/agent/agents/assistant/AGENT.md` and `"$WORKSPACE"/AGENTS.md` exist, and
-`$WORKSPACE` is not inside `$CODE`.
-
-## 6. About the owner
-
-STOP AND ASK, as one message:
-*"A few details for your agents: 1) What name should they call you? 2) Your timezone
-(e.g. Europe/Berlin)? 3) Quiet hours when agents must not write first (default 01:00–09:30)?
-4) Your main agent is called `assistant`. Keep that, or give it another name?"*
-
-- Write the name, timezone and language into `"$WORKSPACE"/knowledge/profile.md`.
-- If they want another agent name, choose an id (lowercase, digits, hyphens) and rename it
-  everywhere: the folder `agent/agents/assistant`, the file
-  `.github/agents/assistant.agent.md`, its `name:` field and the path inside it, the
-  `assistant` id in `AGENTS.md`, and the secret key and config values below. Replace the
-  display name in its `AGENT.md` heading. Use the new id wherever this runbook says
-  `assistant`.
-
-**Check:** `OWNER_NAME` and `TIMEZONE` are set; the launcher's `name:` equals its file name
-and its folder in `agent/agents/`.
-
-## 7. Telegram bot
-
-STOP AND ASK:
-*"Now create your bot in Telegram: 1) open @BotFather, 2) send /newbot, 3) choose a display
-name and a username that ends in `bot`. BotFather replies with a token. Do not send the
-token to me — I'll open a file for you to paste it into."*
-
-Create the secrets file and open it for the human:
+**Check the tools.**
 
 ```sh
-cd "$WORKSPACE"
-test -f secrets.local.json || cp secrets.local.example.json secrets.local.json
-chmod 600 secrets.local.json
-open -e secrets.local.json
+docker version
+docker compose version
+git --version
 ```
 
-Say: *"Replace `replace-with-the-token-from-BotFather` with your token, keep the quotes,
-save and close the file, then tell me 'done'."*
+If Docker is missing or not running → **Ask the person** to install and start Docker Desktop
+(macOS, Windows) or Docker Engine (Linux): https://docs.docker.com/get-docker/. Do not install it
+yourself.
 
-Verify the token without printing it (run from `$CODE`, pass the path as an argument):
+**Explain the layout** in two or three lines before asking anything. This repository is the
+program; the person's own Densemble lives in a separate folder, `densemble-home`, so updating the
+code never touches their knowledge, secrets or history:
+
+```text
+densemble-home/
+  instance/        configuration, the bot token, chat history, logins
+  workspaces/      knowledge and agents, one folder per workspace
+  voice-models/    speech models for voice messages (optional)
+```
+
+**Ask the person**, one question at a time:
+
+1. Which AI subscription Densemble should use: **Claude** (Pro/Max, the default) or **GitHub
+   Copilot**? Remember the answer as the *engine*.
+2. Where to put `densemble-home`? Default: their home folder (`~/densemble-home`; on Windows
+   `%USERPROFILE%\densemble-home`). Below, `HOME_DIR` is its absolute path.
+3. Where to keep workspaces? Default: `HOME_DIR/workspaces`. They may pick another folder, e.g. in
+   Documents, or one that already holds their notes. Below, `WORKSPACES` is its absolute path.
+   Every subfolder of it is visible to Densemble's agents.
+4. Which template to start from? All three come with Glim; they differ in how knowledge is kept.
+   Explain them like this, then recommend **simple** unless their answers point elsewhere:
+   - **simple** ([examples/simple-workspace](examples/simple-workspace/README.md)): profiles and
+     free-form notes. Pick it to start quickly or if unsure; structure can grow later.
+   - **wiki** ([examples/wiki-workspace](examples/wiki-workspace/README.md)): raw sources → work in
+     progress → proposals → a checked wiki. Pick it if they want a tidy knowledge base where only
+     confirmed facts land, e.g. for a project, studies or a family archive.
+   - **wiki split** ([examples/wiki-split-workspace](examples/wiki-split-workspace/README.md)): the
+     same wiki, but the agents are a separate Git repository inside it. Pick it if they plan to
+     share the knowledge with others while keeping the agents separate (or the other way round),
+     or to reuse the agents for several knowledge bases.
+5. What to call this first workspace? There is no default: let them choose (e.g. *Personal*,
+   *Family*, *Work*). The folder name must be Latin letters, digits and dashes; if their name is
+   not, propose a short version (`Мої нотатки` → `my-notes`) and wait for a "yes". Below, `NAME`
+   is the folder name.
+6. Voice messages? Default: **yes**. It needs a speech model of about 470 MB, downloaded once;
+   speech is then recognised on this computer and the audio is not sent anywhere. In Docker it
+   runs on the processor only, so long voice messages take a while.
+
+**Create the folders**, only what is missing (shell shown for macOS/Linux; adapt for Windows):
 
 ```sh
-node -e 'const s=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));const t=s.telegram.assistant_bot_token;fetch(`https://api.telegram.org/bot${t}/getMe`).then(r=>r.json()).then(j=>console.log(j.ok?`OK @${j.result.username}`:`FAIL ${j.description}`))' "$WORKSPACE/secrets.local.json"
+mkdir -p "HOME_DIR/instance/state/data" "HOME_DIR/instance/state/copilot" \
+         "HOME_DIR/instance/state/claude" "HOME_DIR/instance/state/home" \
+         "HOME_DIR/voice-models" "WORKSPACES"
+chmod -R 700 "HOME_DIR/instance"
 ```
 
-**Check:** prints `OK @<bot username>`. On `FAIL Unauthorized`, the token is wrong or has
-extra spaces: ask the human to fix the file.
-
-## 8. The human's Telegram ID
-
-STOP AND ASK: *"Open your new bot @<bot username> in Telegram and press Start (or send it
-any message). Tell me when you've done it."*
+Copy the chosen example as the first workspace, only if `WORKSPACES/NAME` does not exist yet:
 
 ```sh
-node -e 'const s=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));const t=s.telegram.assistant_bot_token;fetch(`https://api.telegram.org/bot${t}/getUpdates`).then(r=>r.json()).then(j=>{for(const u of j.result??[]){const m=u.message;if(m)console.log(m.from.id,"@"+(m.from.username??"-"),m.chat.type)}})' "$WORKSPACE/secrets.local.json"
+cp -R examples/simple-workspace "WORKSPACES/NAME"   # or wiki-workspace, wiki-split-workspace
 ```
 
-**Check:** a line with a numeric ID and `private`. That number is `OWNER_ID`. If several
-people appear, ask the human which username is theirs. If nothing appears, ask them to send
-another message and run it again. (This works only before Densemble runs; afterwards the
-service consumes the updates.)
+Offer to make the workspace a Git repository (`git init` inside it) so their knowledge has
+history; it is optional. For **wiki split** it is the point of the template: with their "yes",
+run `git init` in `WORKSPACES/NAME` (the knowledge) and again in `WORKSPACES/NAME/agent` (the
+agents), and say in one line which repository holds what.
 
-## 9. Permissions mode
-
-STOP AND ASK: *"How careful should your agents be? **Manual**: they ask you with a button in
-Telegram before each action (safer, more taps). **Autopilot**: they act on their own inside
-their tools (faster; use only if you trust the setup). If unsure, choose manual — you can
-switch later."*
-
-**Check:** `permissionMode` is `manual` or `autopilot`.
-
-## 10. Configuration
-
-Create private runtime folders and `config.local.json` in `$CODE` (it is git-ignored):
+**Point Docker at it.** Create `docker/.env` in this repository (it is ignored by Git):
 
 ```sh
-mkdir -p data runtime/copilot && chmod 700 data runtime/copilot
-# only for ENGINE=claude-code:
-mkdir -p runtime/claude && chmod 700 runtime/claude
+DENSEMBLE_INSTANCE=HOME_DIR/instance
+DENSEMBLE_WORKSPACES=WORKSPACES
+DENSEMBLE_MODELS=HOME_DIR/voice-models
 ```
 
-Write `config.local.json` with real absolute paths and values (no `~`, no placeholders):
+with the placeholders replaced by absolute paths. On **Linux** also add `DENSEMBLE_UID=` and
+`DENSEMBLE_GID=` with the output of `id -u` and `id -g`. Inside the container the workspaces are
+`/workspaces/<folder name>`.
+
+**Build the image and fetch the voice model.** Both take several minutes; tell the person, and
+run them at the same time, in the background if your tool allows, while you continue with step 2:
+
+```sh
+docker compose -f docker/compose.yaml build
+```
+
+Only if they want voice messages and `HOME_DIR/voice-models/ggml-small.bin` does not exist yet
+(download to a temporary name first, so an interrupted download is never mistaken for the model):
+
+```sh
+curl -fL --retry 3 -o "HOME_DIR/voice-models/ggml-small.bin.part" \
+  https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin \
+  && mv "HOME_DIR/voice-models/ggml-small.bin.part" "HOME_DIR/voice-models/ggml-small.bin"
+```
+
+Check, before step 4: the build ended without an error and `docker image ls densemble` lists
+`densemble:local`; the model file, if requested, exists and is larger than 400 MB. A failed
+download is not a reason to stop: tell the person voice can be added later and continue.
+
+## 2. The vestibule
+
+**Ask the person** to create a bot for Glim:
+
+> Open Telegram, find **@BotFather**, send `/newbot`. Name: anything you like, e.g. *Glim*.
+> Username: must end in `bot`, e.g. `alex_den_dot_bot`. BotFather replies with a token like
+> `123456:ABC…`. Don't send it to me — I'll create a file for it.
+
+Create `HOME_DIR/instance/secrets.local.json`, only if it does not exist, with a placeholder:
 
 ```json
-{
-  "workspacePath": "<WORKSPACE>",
-  "agentDefinitionsPath": "<WORKSPACE>/agent/agents",
-  "agentLaunchersPath": "<WORKSPACE>/.github/agents",
-  "secretsPath": "<WORKSPACE>/secrets.local.json",
-  "runtimeDataPath": "./data",
-  "runtimeHomePath": "./runtime/copilot",
-  "skillDirectories": ["<WORKSPACE>/agent/skills"],
-  "ownerId": <OWNER_ID>,
-  "ownerName": "<OWNER_NAME>",
-  "quietHours": { "start": "01:00", "end": "09:30", "timezone": "<TIMEZONE>" },
-  "permissionMode": "<manual|autopilot>",
-  "coordinatorAgentId": "assistant",
-  "bots": [
-    { "id": "assistant-bot", "agentId": "assistant", "tokenRef": "telegram.assistant_bot_token" }
-  ],
-  "bindings": [
-    { "botId": "assistant-bot", "chatId": <OWNER_ID>, "kind": "private", "topicId": null }
-  ],
-  "mcp": { "mode": "none" }
-}
+{ "telegram": { "glim_bot_token": "PASTE_THE_TOKEN_HERE" } }
 ```
 
-For `ENGINE=claude-code` also add
-`"claudeCode": { "homePath": "./runtime/claude", "defaultModel": "claude-sonnet-5-5" }` and
-`"engine": "claude-code"` to the bot entry.
+Then `chmod 600` it. **Ask the person** to open that file in an editor, replace
+`PASTE_THE_TOKEN_HERE` with the token, and save. Give them the full path.
 
-The configuration is strict: unknown fields, wrong paths or an unresolved secret stop the
-service with an explicit code. All fields are described in
-[`docs/contracts.md`](docs/contracts.md); a fuller example is
-[`config.example.json`](config.example.json).
-
-**Check** (validates paths, agents and the secret reference; prints no secret):
+**Check the token without showing it:**
 
 ```sh
-node --input-type=module -e 'import { loadConfig } from "./dist/config/index.js"; try { const c = loadConfig("config.local.json", { codeRoot: process.cwd() }); console.log("OK", c.agents.map((a) => a.id)); } catch (e) { console.log("FAIL", e.code ?? e.message); }'
+curl -s "https://api.telegram.org/bot$(sed -n 's/.*"glim_bot_token" *: *"\([^"]*\)".*/\1/p' "HOME_DIR/instance/secrets.local.json")/getMe"
 ```
 
-prints `OK [ 'assistant' ]`. A `FAIL <CODE>` names the problem (see
-[common failures](#common-failures)).
+(On Windows PowerShell read the file with `Get-Content … | ConvertFrom-Json` instead of `sed`.)
+`"ok":true` and a `username` → tell the person the bot's username and continue. `401` → the token
+is wrong or still the placeholder; ask them to paste it again.
 
-## 11. Log in to the AI subscription
+## 3. The key
 
-The service uses its **own** login, separate from the human's terminal tools.
+**Ask the person** who will use this Densemble: only them, or other people too (family,
+colleagues)? Explain: everyone gets their own private chat with Glim and their own history; the
+workspace's knowledge is shared between them; only the person installing it (the *owner*) manages
+the configuration. Others can also be added later.
 
-- **Copilot.** Ask the human to run this in a terminal in `$CODE` (in Claude Code they can
-  type `!` followed by the command) and finish the browser login:
+Densemble answers only people whose numeric Telegram ID is in its configuration. **Ask the
+person** for the name and numeric Telegram ID of everyone at once, their own first:
 
-  ```sh
-  env -u COPILOT_GITHUB_TOKEN -u GH_TOKEN -u GITHUB_TOKEN \
-    COPILOT_HOME="$PWD/runtime/copilot" COPILOT_AUTO_UPDATE=false \
-    ./node_modules/@github/copilot-darwin-arm64/copilot login --web-flow
-  ```
+> Alex — 123456789, Sam — 987654321
 
-- **Claude Code.** Ask the human to run `make claude-login` in `$CODE` and finish the browser
-  login.
+If they don't know an ID, say how to find it: in Telegram, open **@userinfobot** and press Start;
+it replies with the number. Accept only digits; a username (`@alex`) or a phone number is not an
+ID, so ask again. Repeat the list back and wait for a "yes".
 
-Never copy an existing login and never read stored tokens.
+**Write the configuration.** Start from [docker/config.container.example.json](docker/config.container.example.json)
+and write `HOME_DIR/instance/config.json` with these changes; keep the `/state/…`, `/config/…` and
+`/models/…` container paths exactly as in the example:
 
-**Copilot only — choose the model.** List the models this account may use:
+- `workspacePath`, `agentDefinitionsPath` and `skillDirectories`: replace `my-workspace` with
+  `NAME`, e.g. `/workspaces/family`, `/workspaces/family/agent/agents`,
+  `/workspaces/family/agent/skills`;
+- `ownerId`: the numeric ID; `ownerName`: how the person wants to be addressed (ask, default: first name);
+- `bots`: one bot `{ "id": "glim-bot", "agentId": "glim", "tokenRef": "telegram.glim_bot_token" }`;
+  it runs on Claude by default; for the **Copilot** engine add `"engine": "copilot"`;
+- `bindings`: one entry `{ "botId": "glim-bot", "chatId": <ownerId>, "kind": "private", "topicId": null }`;
+- **only if there are other people**, for each of them:
+  - an entry in `users`: `{ "telegramUserId": <their ID>, "displayName": "<name>", "allowedBotIds": ["glim-bot"] }`;
+  - a private binding like the owner's, with `"chatId": <their ID>`;
+
+  and one shared workspace in `workspaces`, the same folder as `workspacePath`:
+  `{ "id": "NAME", "name": "<the workspace name they chose>", "access": "shared", "ownerUserId": <ownerId>,
+  "memberUserIds": [<their IDs>], "path": "/workspaces/NAME", "agentIds": ["glim"] }`;
+- `quietHours.timezone`: the person's IANA time zone (e.g. `Europe/Berlin`); take it from the
+  computer's settings or ask;
+- `coordinatorAgentId`: `"glim"`;
+- leave `permissionMode`, `proactivity`, `claudeCode`, `mcp` and `audio` as in the example.
+
+Check: the file is valid JSON, and there is no token in it.
+
+## 4. Light in the hall
+
+**Log in.** The login is interactive, so **Ask the person** to run it in their own terminal from
+this repository (in Claude Code they can type `!` followed by the command):
 
 ```sh
-node --input-type=module -e 'import { loadConfig } from "./dist/config/index.js"; import { pinnedRuntimePath, serviceClientOptions } from "./dist/agents/copilot.js"; import { CopilotClient } from "@github/copilot-sdk"; const client = new CopilotClient(serviceClientOptions(loadConfig("config.local.json", { codeRoot: process.cwd() }), await pinnedRuntimePath())); await client.start(); try { const auth = await client.getAuthStatus(); if (!auth.isAuthenticated) console.log("NOT_LOGGED_IN"); else for (const m of await client.listModels()) console.log(m.id); } finally { await client.stop(); }'
+docker compose -f docker/compose.yaml run --rm densemble login claude    # Claude engine
+docker compose -f docker/compose.yaml run --rm densemble login copilot   # Copilot engine
 ```
 
-If the `model:` in `"$WORKSPACE"/.github/agents/assistant.agent.md` is not in the list,
-STOP AND ASK which listed model to use (suggest a capable general model) and put it there.
+Claude shows a link and asks for the code shown after signing in; Copilot shows a GitHub link
+and a code. They finish in a browser. This login belongs to this Densemble only and does not touch
+their own Copilot or Claude logins.
 
-**Check:** `make doctor` (next step) shows the login as ready.
-
-## 12. Doctor
+**Check.**
 
 ```sh
-make doctor
+docker compose -f docker/compose.yaml run --rm densemble doctor
 ```
 
-It prints a JSON report — `ready` overall and a `checks` list of `{ component, ready, code }` —
-and exits with code 2 while something is not ready.
+`doctor` checks only the engine the bot uses. Read every check. What must be ready:
 
-**Check:**
-- `authentication` → `AUTHENTICATED` and `models` → `MODELS_READY` (Copilot), or
-  `claude-authentication` and `claude-models` ready (Claude Code);
-- `bot:assistant-bot` ready;
-- voice and module lines may be not ready: voice messages and modules are optional
-  ([user guide](docs/user-guide/README.md)).
+- `bot:glim-bot` → `BOT_READY`;
+- Claude engine: `claude-authentication` → `AUTHENTICATED` and `claude-models` → `MODELS_READY`;
+- Copilot engine: `authentication` → `AUTHENTICATED` and `models` → `MODELS_READY`;
+- with voice messages: `audio` → `MEDIA_AUDIO_READY`.
 
-With `ENGINE=claude-code` and no Copilot login, the Copilot `authentication` line is
-expected to be not ready, so the exit code stays 2; tell the human and continue.
+Without voice messages, `audio` → `MEDIA_AUDIO_MODEL_MISSING` is expected and makes `doctor` exit
+with code 2; that alone is not a failure. With Copilot, `AGENT_MODEL_UNAVAILABLE` means the `model:` in
+`WORKSPACES/NAME/agent/agents/glim/AGENT.md` is not in the person's plan: offer one of the available
+models and change it with their "yes". With Claude, the model comes from `claudeCode.defaultModel`
+in `config.json`.
 
-## 13. Run in the background
-
-STOP AND ASK: *"Everything is ready. May I install Densemble as a background service that
-starts when you log in to your Mac? (You can stop it any time with `make stop`.)"*
+**Start.**
 
 ```sh
-make install
-make start
-make status
+docker compose -f docker/compose.yaml up -d
+docker compose -f docker/compose.yaml logs --tail 50
 ```
 
-**Check:** `make status` shows the service loaded, and the log has a ready line for the bot:
-`grep -h TG_BOT_READY data/logs/service.log | tail -1`.
+Check: the container is running (`docker compose -f docker/compose.yaml ps`) and the log has no
+error codes.
 
-If the human declined, run it in a terminal instead: `make run` (Ctrl+C stops it).
+## 5. The edge of the table
 
-## 14. Final check: hello in Telegram
+**Ask the person** to write anything to the bot in Telegram, e.g. "Hi". Glim answers there and
+starts the handover: how to address them, a short tour, and then it is ready to work.
+If there are other people, tell the owner they can now write to the bot too: each gets their own
+chat with Glim, who greets them the same way.
 
-STOP AND ASK: *"Send 'Hi' to @<bot username> in Telegram. Did your agent answer?"*
+When they confirm the reply arrived, show the full circle and say goodbye in Glim's voice: the den
+is theirs now, and from here on Glim lives in Telegram. Then give them the short list below.
 
-**Check:** the agent introduces itself and answers. Installation is done. Tell the human:
+- Stop: `docker compose -f docker/compose.yaml down`; start again: `… up -d`.
+- Update: `git pull`, then `… build` and `… up -d`.
+- The bot answers only while the computer is awake and Docker runs.
+- Everything Densemble knows lives in `WORKSPACES/NAME`, as plain Markdown; its own state lives in
+  `HOME_DIR`. Back up both; this repository can always be cloned again.
 
-- Talk to the agent in Telegram; `/help` lists the commands.
-- To add agents or skills, ask the agent ("I want an agent for …"); it follows the
-  `create-agent` and `create-skill` skills in the workspace.
-- Restart after configuration changes: `make restart` in `$CODE`.
-- Optional features — voice messages, recording transcription, reels — are in the
-  [user guide](docs/user-guide/README.md) and the [developer guide](docs/development.md).
+## Adding voice messages later
 
-## Common failures
+If the person declined voice messages or the download failed, and later wants them: download the
+model with the command from [step 1](#1-the-path-to-the-door), then
+`docker compose -f docker/compose.yaml restart` and `doctor` again: `audio` → `MEDIA_AUDIO_READY`.
+Speech is recognised inside the container; the audio itself is not sent anywhere.
 
-| Symptom | Cause and fix |
+## Adding people later
+
+Densemble ignores anyone who is not in its configuration. To add someone, with the owner: get the
+person's name and numeric Telegram ID (as in [step 3](#3-the-key)), add them to `users`, add their
+private binding and their ID to the shared workspace's `memberUserIds` in
+`HOME_DIR/instance/config.json` (create the shared workspace entry as in step 3 if it is the first
+other person), then `docker compose -f docker/compose.yaml restart`. They can write to the bot.
+
+## When something fails
+
+| Symptom | What to do |
 |---|---|
-| `FAIL EXTERNAL_CANONICAL_SECRETS_REQUIRED` | `secretsPath` must point to a file named `secrets.local.json` outside this folder (in the workspace). |
-| `FAIL SKILL_DIRECTORIES_INVALID` | `skillDirectories` must contain `<WORKSPACE>/agent/skills`, written exactly. |
-| `FAIL LAUNCHER_ID_MISMATCH`, `CANONICAL_REFERENCE_MISMATCH`, `CANONICAL_WITHOUT_LAUNCHER` | The agent id differs between the launcher file name, its `name:`, the path inside it and the folder in `agent/agents/`. Make them identical. |
-| `FAIL NO_AGENTS` | `agentLaunchersPath` has no `*.agent.md` files. |
-| `FAIL CONFIG_SCHEMA_INVALID` | A typo, a missing value or an extra field in `config.local.json`; the schema is strict. Compare with step 10. |
-| `FAIL CONFIG_JSON_UNREADABLE` | `config.local.json` is not valid JSON (often a trailing comma or a leftover `<placeholder>`). |
-| `models` → `AGENT_MODEL_UNAVAILABLE` | The launcher's `model:` is not available on this account: step 11, choose the model. |
-| `authentication` → `SERVICE_LOGIN_REQUIRED` | The service login (step 11) is missing; the terminal CLI's own login does not count. |
-| The bot does not answer at all | Wrong `ownerId` or `chatId` (step 8), or the service is not running: `make status`, `make logs`. Messages from unconfigured people and chats are ignored on purpose. |
-| `MODULE_NOT_FOUND … dist/main.js` in the logs | The build is missing: `make stop`, `npm ci`, `npm run build`, `make install`, `make start`. |
-| `npm ci` fails on `better-sqlite3` or `sharp` | Command Line Tools are missing (`xcode-select --install`), or Node is not 24. |
+| `set DENSEMBLE_INSTANCE` (or another variable) | `docker/.env` is missing or not in `docker/` |
+| `config.json` is a directory | Docker created it because the file was missing: remove the empty directory, write the file, retry |
+| `401 Unauthorized` from Telegram | token wrong or still the placeholder; ask the person to paste it again |
+| `WEBHOOK_CONFLICT` | the bot has a webhook from elsewhere; the person decides whether to remove it (`deleteWebhook`) |
+| `CLAUDE_LOGIN_REQUIRED` / `SERVICE_LOGIN_REQUIRED` | the Claude / Copilot login did not finish; run it again |
+| `AGENT_MODEL_UNAVAILABLE` (Copilot) | change `model:` in Glim's `AGENT.md` to an available model |
+| A config error code (e.g. `CANONICAL_WITHOUT_LAUNCHER`, `BINDING_…`) | look the code up in [docs/contracts.md](docs/contracts.md) and fix `config.json` or the workspace |
+| No reply in Telegram | `logs`: is the container running? is `chatId` the person's numeric ID? |
+
+More detail: [platforms and Docker](docs/platforms.md).

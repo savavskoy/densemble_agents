@@ -21,7 +21,7 @@ function fixture(base: string): ServiceConfig {
     agentLaunchersPath: join(paths.workspacePath, "launchers"),
     secretsPath: join(paths.workspacePath, "secrets.local.json"),
     skillDirectories: [join(paths.workspacePath, "skills")], ownerId: 42,
-    bots: [{ id: "helper", agentId: "helper", tokenRef: "telegram.helper" }],
+    bots: [{ id: "helper", agentId: "helper", tokenRef: "telegram.helper", engine: "copilot" }],
     bindings: [{ botId: "helper", chatId: 42, topicId: null, kind: "private" }], mcp: { mode: "none" },
   };
 }

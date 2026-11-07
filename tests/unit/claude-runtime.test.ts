@@ -325,6 +325,33 @@ describe("Claude Code non-owner boundary", () => {
     await expect(ask({ file_path: join(f.workspace, "AGENTS.md") })).resolves.toMatchObject({ behavior: "deny" });
     await expect(ask({ file_path: "../secret" })).resolves.toMatchObject({ behavior: "deny" });
   });
+  it("lets a session use its linked workspaces and still refuses unlinked ones", async () => {
+    const f = setup();
+    const guest = { ...scope, ownerId: 202, chatId: 202 };
+    const [management, tech, other] = ["management", "tech", "other"].map((name) => {
+      const path = resolve(".cache", `claude-${name}-${randomUUID()}`);
+      roots.push(path);
+      mkdirSync(path, { recursive: true });
+      return path;
+    });
+    f.config.config.users = [{ telegramUserId: 202, displayName: "Guest", allowedBotIds: [scope.botId] }];
+    f.config.config.workspaces = [
+      { id: "management", name: "Management", access: "shared", ownerUserId: scope.ownerId, memberUserIds: [202],
+        path: management!, agentIds: ["synthetic-agent"], linkedWorkspaceIds: ["tech"] },
+      { id: "tech", name: "Tech", access: "private", ownerUserId: scope.ownerId, path: tech!, agentIds: ["synthetic-agent"] },
+      { id: "other", name: "Other", access: "private", ownerUserId: scope.ownerId, path: other!, agentIds: ["synthetic-agent"] },
+    ];
+    const identity = { ...f.identity, scope: guest };
+    await f.runtime.open({ session: { ...f.session, scope: guest, workspace: management! }, onEvent: () => undefined, emptyHistory: true });
+    const options = f.hosts[0]!.options!;
+    expect(options.additionalDirectories).toEqual([tech]);
+    expect((options.systemPrompt as { append: string }).append).toContain(`Tech (\`${tech}\`)`);
+    await f.runtime.execute({ kind: "send", identity, input: { text: "x", images: [], attachmentIds: [], notices: [] } });
+    const ask = (input: Record<string, unknown>) => options.canUseTool!("Read", input,
+      { signal: new AbortController().signal, toolUseID: "t", requestId: "r" });
+    await expect(ask({ file_path: join(tech!, "a.md") })).resolves.toMatchObject({ behavior: "allow" });
+    await expect(ask({ file_path: join(other!, "a.md") })).resolves.toMatchObject({ behavior: "deny" });
+  });
 });
 
 describe("Claude Code helpers", () => {

@@ -30,7 +30,7 @@ function setup(options: { requestTimeoutMs?: number } = {}) {
       workspacePath: root, agentDefinitionsPath: root, agentLaunchersPath: root, secretsPath: join(root, "secrets.local.json"),
       runtimeDataPath: root, runtimeHomePath: join(root, "service-home"), skillDirectories: [root], ownerId: scope.ownerId,
       permissionMode: "manual",
-      bots: [{ id: scope.botId, agentId: "synthetic-agent", tokenRef: "bot.token" }],
+      bots: [{ id: scope.botId, agentId: "synthetic-agent", tokenRef: "bot.token", engine: "copilot" }],
       bindings: [{ botId: scope.botId, chatId: scope.chatId, topicId: null, kind: "private" }], mcp: { mode: "none" },
     },
     agents: [

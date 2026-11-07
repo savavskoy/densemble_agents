@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { StringDecoder } from "node:string_decoder";
+import { PROCESS_GROUPS } from "../platform/index.js";
 import { checkAbort, MediaError } from "./errors.js";
 
 export interface ProcessControl { pause(): void; resume(): void; readonly paused: boolean; readonly pid: number | undefined }
@@ -22,7 +23,7 @@ const MAX_PARTIAL_LINE = 8192;
 export const runManagedProcess: ProcessRunner = async (executable, args, options) => {
   checkAbort(options.signal);
   return new Promise<ProcessResult>((resolve, reject) => {
-    const grouped = process.platform !== "win32";
+    const grouped = PROCESS_GROUPS;
     const child = spawn(executable, args, { shell: false, detached: grouped, stdio: ["ignore", "pipe", "pipe"],
       ...(options.cwd ? { cwd: options.cwd } : {}) });
     let failure: MediaError | undefined;

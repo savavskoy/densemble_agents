@@ -37,7 +37,7 @@ export function fixture({ autoDelivery = true, ...extra }: Partial<ApplicationOp
       workspacePath: workspace, agentDefinitionsPath: workspace, agentLaunchersPath: workspace,
       secretsPath: join(root, "secrets.local.json"), runtimeDataPath: root, runtimeHomePath: join(root, "home"),
       skillDirectories: [workspace], ownerId: scope.ownerId,
-      bots: [{ id: scope.botId, agentId: "synthetic-agent", tokenRef: "synthetic.bot" }],
+      bots: [{ id: scope.botId, agentId: "synthetic-agent", tokenRef: "synthetic.bot", engine: "copilot" }],
       bindings: [
         { botId: scope.botId, chatId: scope.chatId, topicId: null, kind: "private" },
         { botId: neighbor.botId, chatId: neighbor.chatId, topicId: neighbor.topicId, kind: "forum" },

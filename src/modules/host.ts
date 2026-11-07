@@ -9,6 +9,7 @@ import {
   type ModuleEntry, type ModuleHealth, type ModuleInstance, type ModuleReason, type ModuleState, type ModuleStateReport,
 } from "./contract.js";
 import { loadModule, type ModuleLoader } from "./loader.js";
+import { currentPlatform, type PlatformOs } from "../platform/index.js";
 
 /** Core ability names live in this namespace; modules may not use it. */
 const CORE_PREFIX = "densemble_";
@@ -43,6 +44,8 @@ export interface ModuleHostOptions {
   chat?: () => ModuleChatBridge | undefined;
   stopTimeoutMs?: number;
   now?: () => number;
+  /** The operating system modules are checked against; defaults to the running one. */
+  os?: PlatformOs;
 }
 
 export interface ModuleHost {
@@ -80,6 +83,8 @@ const HOST_REASONS: Readonly<Record<string, (id: string, detail?: string) => Mod
     fix: `Увімкніть modules.${id}.enabled і виконайте make restart.` }),
   MODULE_UNKNOWN: (id) => ({ cause: `Densemble не знайшов модуля «${id}» у src/modules/${id}.`,
     fix: `Перевірте назву modules.${id} у config.local.json або приберіть цей запис, потім виконайте make restart.` }),
+  MODULE_PLATFORM_UNSUPPORTED: (id) => ({ cause: "Модуль поки не працює на цій платформі (зокрема в Docker); решта Densemble працює.",
+    fix: `Вимкніть modules.${id} у config.local.json або запустіть Densemble нативно на Mac, потім перезапустіть сервіс.` }),
   MODULE_SETTINGS_INVALID: (id) => ({ cause: "Налаштування модуля некоректні.",
     fix: `Виправте modules.${id}.settings за README модуля і виконайте make restart.` }),
   MODULE_DEPENDENCY_UNAVAILABLE: (_id, dependency) => ({
@@ -119,6 +124,7 @@ export function createModuleHost(options: ModuleHostOptions): ModuleHost {
   const loader = options.loader ?? loadModule;
   const readInstructions = options.readInstructions ?? instructionsReader();
   const stopTimeoutMs = options.stopTimeoutMs ?? 10_000;
+  const os = options.os ?? currentPlatform().os;
   const now = options.now ?? Date.now;
   const sink = options.diagnostics;
   const listeners = new Set<(id: string, health: ModuleHealth) => void>();
@@ -166,6 +172,9 @@ export function createModuleHost(options: ModuleHostOptions): ModuleHost {
       let definition: ModuleDefinition | undefined;
       try { definition = await loader(slot.entry.id); } catch { definition = undefined; }
       if (definition?.id !== slot.entry.id) { set(slot, "unavailable", "MODULE_UNKNOWN"); continue; }
+      if (definition.platforms && !definition.platforms.includes(os)) {
+        set(slot, "unavailable", "MODULE_PLATFORM_UNSUPPORTED"); continue;
+      }
       slot.definition = definition;
       loaded.push(slot);
     }

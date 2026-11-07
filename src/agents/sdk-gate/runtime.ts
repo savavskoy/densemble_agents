@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
@@ -8,28 +7,30 @@ import { CopilotClient, RuntimeConnection } from "@github/copilot-sdk";
 import type { CopilotClientOptions } from "@github/copilot-sdk";
 import { bounded, CLI_VERSION, GateError, safeError, SDK_VERSION } from "./contracts.js";
 import type { AuthMode } from "./contracts.js";
+import { copilotPackage, enginePath } from "../../platform/engines.js";
+import { currentPlatform, PlatformError, type Platform } from "../../platform/index.js";
+import { parseBsdProcesses, processSnapshotSync } from "../../platform/processes.js";
 
 export type ProcessIdentity = { pid: number; parent: number; started: string; command: string; state: string };
 
 export function processes(): ProcessIdentity[] {
-  const output = execFileSync("/bin/ps", ["-axo", "pid=,ppid=,lstart=,stat=,comm="], {
-    encoding: "utf8", timeout: 2_000, maxBuffer: 2 * 1024 * 1024,
-    env: { PATH: "/usr/bin:/bin", LANG: "C", LC_ALL: "C" },
-  });
-  return parseProcessList(output);
+  try {
+    return processSnapshotSync(gatePlatform()).map((entry) => ({ ...entry, state: entry.state ?? "" }));
+  } catch (error) {
+    throw error instanceof PlatformError ? new GateError("PROCESS_LIST_PARSE_FAILED") : error;
+  }
+}
+
+function gatePlatform(): Platform {
+  try { return currentPlatform(); } catch { throw new GateError("GATE_PLATFORM_UNSUPPORTED"); }
 }
 
 export function parseProcessList(output: string): ProcessIdentity[] {
-  return output.split("\n").flatMap((line) => {
-    if (!line.trim()) return [];
-    const match = /^\s*(\d+)\s+(\d+)\s+(\w+\s+\w+\s+\d+\s+[\d:]+\s+\d+)\s+(\S+)\s+(.+)$/.exec(line);
-    if (!match) throw new GateError("PROCESS_LIST_PARSE_FAILED");
-    if (match[4]?.startsWith("Z")) return [];
-    return [{
-      pid: Number(match[1]), parent: Number(match[2]),
-      started: match[3]!, command: match[5]!, state: match[4]!,
-    }];
-  });
+  try {
+    return parseBsdProcesses(output).map((entry) => ({ ...entry, state: entry.state ?? "" }));
+  } catch {
+    throw new GateError("PROCESS_LIST_PARSE_FAILED");
+  }
 }
 
 export function sameProcess(left: ProcessIdentity, right: ProcessIdentity): boolean {
@@ -63,12 +64,10 @@ export function signalOwned(identity: ProcessIdentity, signal: NodeJS.Signals): 
 }
 
 export function pinnedCli(): string {
-  if (process.platform !== "darwin" || process.arch !== "arm64") {
-    throw new GateError("GATE_REQUIRES_MACOS_ARM64");
-  }
+  const platform = gatePlatform();
   const sdkEntry = fileURLToPath(import.meta.resolve("@github/copilot-sdk"));
   const sdkManifest = JSON.parse(readFileSync(resolve(dirname(sdkEntry), "../package.json"), "utf8")) as { version: string };
-  const cliPath = realpathSync(fileURLToPath(import.meta.resolve("@github/copilot-darwin-arm64")));
+  const cliPath = realpathSync(fileURLToPath(import.meta.resolve(copilotPackage(platform))));
   const cliManifest = JSON.parse(readFileSync(join(dirname(cliPath), "package.json"), "utf8")) as { version: string };
   if (sdkManifest.version !== SDK_VERSION || cliManifest.version !== CLI_VERSION) {
     throw new GateError("PINNED_PACKAGE_VERSION_MISMATCH");
@@ -120,7 +119,7 @@ export function runtimeOptions(
     if (!isAbsolute(ghConfig)) throw new GateError("AUTH_GH_CONFIG_MUST_BE_ABSOLUTE");
     env.GH_CONFIG_DIR = ghConfig;
     env.GH_PROMPT_DISABLED = "1";
-    env.PATH = `${dirname(process.execPath)}:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin`;
+    env.PATH = enginePath(gatePlatform());
   }
   const token = authMode === "token" ? source.COPILOT_GITHUB_TOKEN : undefined;
   return {

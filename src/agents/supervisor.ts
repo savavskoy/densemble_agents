@@ -1,25 +1,16 @@
-import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, realpath, rename, unlink, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { promisify } from "node:util";
 import { z } from "zod";
 import type { DiagnosticSink } from "../ports.js";
+import { nativeProcesses, parseBsdProcesses, type ProcessAccess, type ProcessIdentity } from "../platform/processes.js";
 import { bounded, RuntimeError } from "./contracts.js";
 
-const exec = promisify(execFile);
-export interface ProcessIdentity { pid: number; parent: number; started: string; command: string; state?: string | undefined }
-export function parseProcesses(text: string): ProcessIdentity[] {
-  return text.split("\n").flatMap((line) => {
-    if (!line.trim()) return [];
-    const match = /^\s*(\d+)\s+(\d+)\s+(\w+\s+\w+\s+\d+\s+[\d:]+\s+\d+)\s+(\S+)\s+(.+)$/.exec(line);
-    if (!match) throw new RuntimeError("PROCESS_LIST_INVALID");
-    return match[4]!.startsWith("Z") ? [] : [{
-      pid: Number(match[1]), parent: Number(match[2]), started: match[3]!, command: match[5]!, state: match[4]!,
-    }];
-  });
-}
+export { nativeProcesses, type ProcessAccess, type ProcessIdentity };
+/** The macOS `ps` parser; kept under its old name for callers and tests. */
+export const parseProcesses = parseBsdProcesses;
+
 export function sameProcess(a: ProcessIdentity, b: ProcessIdentity): boolean {
   return a.pid === b.pid && a.started === b.started && a.command === b.command;
 }
@@ -37,24 +28,6 @@ export function descendants(root: ProcessIdentity, snapshot: ProcessIdentity[]):
   }
   return result;
 }
-export interface ProcessAccess {
-  snapshot(): Promise<ProcessIdentity[]>;
-  signal(pid: number, signal: NodeJS.Signals): void;
-}
-export const nativeProcesses: ProcessAccess = {
-  async snapshot() {
-    const { stdout } = await exec("/bin/ps", ["-axo", "pid=,ppid=,lstart=,stat=,comm="], {
-      encoding: "utf8", timeout: 2_000, maxBuffer: 2 * 1024 * 1024,
-      env: { PATH: "/usr/bin:/bin", LANG: "C", LC_ALL: "C" },
-    });
-    return parseProcesses(stdout);
-  },
-  signal(pid, signal) {
-    try { process.kill(pid, signal); }
-    catch (error) { if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw new RuntimeError("PROCESS_SIGNAL_FAILED"); }
-  },
-};
-
 const identitySchema = z.object({
   pid: z.number().int().positive(), parent: z.number().int().nonnegative(),
   started: z.string().min(1), command: z.string().min(1),

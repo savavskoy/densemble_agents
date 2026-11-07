@@ -15,8 +15,8 @@ Relative paths resolve beside that configuration file, not beside the executable
 explicitly if launched from elsewhere.
 
 - `workspacePath` is the external agent workspace, never the service source tree.
-  `agentDefinitionsPath`, `agentLaunchersPath`, and every declared skill directory
-  must exist inside it. Explicit `workspace/agent/skills` inclusion is required.
+  `agentDefinitionsPath`, the optional `agentLaunchersPath`, and every declared skill
+  directory must exist inside it. Explicit `workspace/agent/skills` inclusion is required.
 - `runtimeDataPath` (SQLite/media) and `runtimeHomePath` (service Copilot OAuth and
   history) must exist, be mutually disjoint, and not overlap the workspace or
   interactive CLI home. `interactiveHomePath` defaults to the user's `.copilot`.
@@ -49,6 +49,13 @@ explicitly if launched from elsewhere.
   Workspace paths must be canonical, non-symlink, distinct and disjoint from
   service code, instructions, credentials and runtime paths. A directory does
   not need Git metadata and must not overlap another workspace entry.
+- Optional `linkedWorkspaceIds` lists other configured workspaces whose folders
+  sessions of this workspace may also use (unique, existing, not itself;
+  otherwise `WORKSPACE_LINK_INVALID`). Linking does not make anyone a member of
+  the linked workspace: the agent is told the linked names and paths, their
+  paths are no longer forbidden by the lexical check, and Claude Code receives
+  them as additional directories. Densemble cannot make a link read-only; mount
+  the folder read-only (e.g. in Docker) when that matters.
 - Each private user chat gets its own conversation scope. A user with exactly
   one available workspace starts there. With multiple available workspaces,
   Densemble starts the conversation in an empty lobby that cannot be opened as
@@ -83,8 +90,9 @@ explicitly if launched from elsewhere.
   Managed-policy approval requirements, sandbox escalation, detached processes
   and excluded tools remain denied. Questions are not auto-answered. This
   service-wide owner setting takes effect on restart, never via agent input.
-- Optional `bots[].engine` is `"copilot"` (default) or `"claude-code"`; optional
-  `bots[].model` overrides the new-session model. A Claude Code bot requires
+- Optional `bots[].engine` is `"claude-code"` (default) or `"copilot"`; optional
+  `bots[].model` overrides the new-session model. A Claude Code bot (including one without
+  `engine`) requires
   `claudeCode: { homePath, defaultModel }`. `homePath` is an existing private
   service-owned `CLAUDE_CONFIG_DIR`, disjoint from the workspace(s), `~/.claude`,
   the Copilot home, data, config and secrets. A persona may be bound once per engine.
@@ -94,6 +102,15 @@ explicitly if launched from elsewhere.
   bindings only. `infer` is independent and absent unless explicitly declared.
   `defaultModel` comes only from the launcher; the canonical prompt is a path
   reference. Runtime must read that source and register every discovered agent.
+- A launcher is optional. An `agent/agents/<id>/AGENT.md` without one is
+  **self-sufficient**: its own frontmatter carries the same metadata as a launcher
+  (`name` equal to the folder, `description`, `model`, optional `user-invocable`,
+  `infer`, `tools`), and the whole file is the canonical prompt. A folder with neither
+  a launcher nor frontmatter fails with `CANONICAL_WITHOUT_LAUNCHER`; invalid
+  frontmatter uses the launcher codes. When a launcher exists, it wins and the
+  `AGENT.md` frontmatter is not read as metadata. Without `agentLaunchersPath`
+  (and, for an `agentSource` workspace, without `.github/agents`) every agent is
+  self-sufficient.
   Model availability must be checked by the runtime, without silent substitution.
 - MCP must explicitly declare `mode: "none"` or `"allowlist"` with `servers`.
   A server has `name`, `type: "stdio" | "http"`, and a nonempty `tools` allowlist.
@@ -288,7 +305,7 @@ module authors: [`src/modules/README.md`](../src/modules/README.md).
 | State | Codes |
 |---|---|
 | `disabled` | `MODULE_DISABLED` |
-| `unavailable` | `MODULE_UNKNOWN`, `MODULE_SETTINGS_INVALID`, `MODULE_DEPENDENCY_UNAVAILABLE` (`detail` = dependency id), `MODULE_DEPENDENCY_CYCLE`, `MODULE_ABILITY_DUPLICATE`, `MODULE_ABILITY_INVALID`, `MODULE_INSTRUCTIONS_MISSING`, module codes (e.g. `RECORDING_MODEL_MISSING`, `RECORDINGS_PATH_OUTSIDE_WORKSPACE`) |
+| `unavailable` | `MODULE_UNKNOWN`, `MODULE_PLATFORM_UNSUPPORTED` (module's `platforms` excludes this OS), `MODULE_SETTINGS_INVALID`, `MODULE_DEPENDENCY_UNAVAILABLE` (`detail` = dependency id), `MODULE_DEPENDENCY_CYCLE`, `MODULE_ABILITY_DUPLICATE`, `MODULE_ABILITY_INVALID`, `MODULE_INSTRUCTIONS_MISSING`, module codes (e.g. `RECORDING_MODEL_MISSING`, `RECORDINGS_PATH_OUTSIDE_WORKSPACE`) |
 | `starting` | `MODULE_STARTING` |
 | `ready` | `MODULE_READY` |
 | `failed` | `MODULE_START_FAILED`, `MODULE_FAILED`, module codes from `ctx.fail` or a `ctx.run` rejection (e.g. `RECORDINGS_FOLDER_UNREADABLE`) |
@@ -515,6 +532,22 @@ runtimeDataPath/modules/reels/work/           overlay PNGs, removed at start and
 - Diagnostics: `REELS_VIDEO_PREPARED`, `REELS_PREPARE_FAILED` (`code`), `REELS_CUT_DONE`
   (`count`), `REELS_CUT_FAILED` (`code`), `REELS_JOBS_WRITE_FAILED`. Doctor: `reels-folder`,
   `reels-yt-dlp`.
+
+## Platforms
+
+The supported platforms, the container and its guards are described in
+[platforms](platforms.md); everything platform-specific lives in `src/platform/`
+(a test enforces that no other file reads `process.platform`/`process.arch`).
+Start codes: `PLATFORM_UNSUPPORTED` (anything but darwin-arm64 and glibc
+linux-x64/arm64), `CONTAINER_ROOT_FORBIDDEN` (effective uid 0, on every platform),
+`CONTAINER_STATE_NOT_MOUNTED` (with `DENSEMBLE_CONTAINER=1`, a data or engine home
+on the container's own filesystem or a tmpfs). `doctor` adds a `platform` check
+(`PLATFORM_NATIVE` / `PLATFORM_CONTAINER`, id in `details.platform`). A module may
+declare `platforms: ("darwin" | "linux")[]`; recordings and reels declare `darwin`.
+Process identity on Linux comes from `/proc` (`started` = boot id + start ticks,
+`command` = `/proc/<pid>/exe`, or the emulated program under Rosetta/QEMU). `login copilot|claude` runs the pinned engine login
+against the service home under the instance lock; `service-unit` (alias `launchd`)
+prints a launchd plist on macOS or a systemd user unit on Linux.
 
 ## Remaining adapter responsibilities
 

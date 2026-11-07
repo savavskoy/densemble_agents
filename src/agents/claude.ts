@@ -8,7 +8,7 @@ import type {
   SDKControlInitializeResponse, SDKMessage, SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
-import { authorizedWorkspace, DEFAULT_WORKSPACE_ID, ownerLabel, type AgentDefinition, type LoadedConfig } from "../config/index.js";
+import { authorizedWorkspace, DEFAULT_WORKSPACE_ID, linkedWorkspaces, ownerLabel, type AgentDefinition, type LoadedConfig } from "../config/index.js";
 import type { ModelInfo, RequestAnswer, RequestPayload, RunIdentity, RuntimeCommand, RuntimeEvent, Scope, Session } from "../domain.js";
 import { scopeKey } from "../domain.js";
 import type { DiagnosticSink } from "../ports.js";
@@ -23,7 +23,7 @@ import type { ServiceSkill } from "./claude-env.js";
 import { detachedAction, proactivityRequestSchema } from "./copilot.js";
 import { ProcessSupervisor } from "./supervisor.js";
 import type { ProcessFailure } from "./supervisor.js";
-import { workspaceViolation } from "./workspace-guard.js";
+import { linkedWorkspacesInstruction, workspaceViolation } from "./workspace-guard.js";
 import { claudeModuleTool, claudeModuleToolName, type ModuleToolGuard } from "./module-tools.js";
 import type { ModuleHost } from "../modules/host.js";
 import { buildSessionModules } from "../modules/instructions.js";
@@ -356,14 +356,17 @@ export function createClaudeRuntime(options: ClaudeRuntimeOptions): ControlledRu
     const owner = user === config.config.ownerId;
     const match = authorizedWorkspace(config.config, user, session.scope.botId, session.workspace);
     if (!match) throw new RuntimeError("WORKSPACE_ACCESS_DENIED");
+    // Members of a shared workspace get the same MCP servers as the owner.
+    const mcpAccess = owner || match !== DEFAULT_WORKSPACE_ID;
     const agents = match === DEFAULT_WORKSPACE_ID ? config.agents : config.agents.filter((agent) => match.agentIds.includes(agent.id));
     const main = agents.find((agent) => agent.id === session.agentId);
     if (!main) throw new RuntimeError("RUNTIME_AGENT_MISSING");
+    const linked = linkedWorkspaces(config.config, session.workspace);
     const forbiddenRoots = owner ? [] : [
       config.config.workspacePath, config.config.runtimeDataPath, config.config.runtimeHomePath, config.config.secretsPath,
       config.config.interactiveHomePath ?? "", claudeHome(config), resolve(homedir(), ".claude"),
       ...(config.config.workspaces ?? []).map((entry) => entry.path),
-    ].filter((path) => Boolean(path) && path !== session.workspace);
+    ].filter((path) => Boolean(path) && path !== session.workspace && !linked.some((entry) => entry.path === path));
     const prompt = async (agent: AgentDefinition) =>
       `Source: ${relative(session.workspace, agent.canonicalPath)}\n${await readFile(agent.canonicalPath, "utf8")}`;
     const subagents: Record<string, SdkAgent> = {};
@@ -398,10 +401,11 @@ export function createClaudeRuntime(options: ClaudeRuntimeOptions): ControlledRu
         "Do not use structured question forms. " +
         "If you need clarification, ask in plain text, one question at a time, then end your turn and wait for their reply. " +
         "Work only inside the current workspace directory; never read, list or modify anything outside it, including repository metadata.";
+    const links = linkedWorkspacesInstruction(linked);
     const append = [
       `# Persona: ${main.id}\nYou are this agent for the whole conversation.\n${await prompt(main)}`,
       ...instructions.map((entry) => `# Workspace instructions\nSource: ${entry.source}\n${entry.text}`),
-      `# Densemble service\n${telegram}\n` +
+      `# Densemble service\n${telegram}${links}\n` +
         "Densemble tools are provided by the `densemble` MCP server: `densemble_manage_proactivity` " +
         `(${proactivityTool}) manages your own reminders and check-ins; \`densemble_export_file\` (${exportTool}) ` +
         "returns a generated workspace file to this chat. A path mentioned in text is not an export." +
@@ -427,7 +431,7 @@ export function createClaudeRuntime(options: ClaudeRuntimeOptions): ControlledRu
       }
       const name = input.tool_name === "Task" ? "Agent" : input.tool_name;
       const known = tools.includes(name) || name === exportTool || name === proactivityTool || moduleTools.has(name) ||
-        (owner && allowedMcp.has(name));
+        (mcpAccess && allowedMcp.has(name));
       if (!known) return deny("TOOL_EXCLUDED_REJECTED", "Цей інструмент вимкнений у керованому сервісі.");
       if (name === "Agent") {
         const type = (input.tool_input as { subagent_type?: unknown } | null)?.subagent_type;
@@ -518,11 +522,11 @@ export function createClaudeRuntime(options: ClaudeRuntimeOptions): ControlledRu
     return {
       expected,
       settings: {
-        cwd: session.workspace, additionalDirectories: [], settingSources: [], strictMcpConfig: true,
+        cwd: session.workspace, additionalDirectories: linked.map((entry) => entry.path), settingSources: [], strictMcpConfig: true,
         plugins: service.plugin ? [{ type: "local", path: service.plugin, skipMcpDiscovery: true }] : [], skills: expected,
         tools, disallowedTools, agents: subagents, model: session.appliedModel,
         systemPrompt: { type: "preset", preset: "claude_code", append },
-        mcpServers: { densemble, ...(owner ? mcpServers : {}) },
+        mcpServers: { densemble, ...(mcpAccess ? mcpServers : {}) },
         permissionMode: "default", permissionPrompts: "host", canUseTool, hooks: { PreToolUse: [{ hooks: [preToolUse] }] },
         includePartialMessages: true, persistSession: true, env: claudeEnvironment(config), stderr: () => undefined,
         ...(resume ? { resume: session.id } : { sessionId: session.id }),

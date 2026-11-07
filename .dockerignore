@@ -1,0 +1,23 @@
+# Only code goes into the build context: never configuration, secrets, state, models or logs.
+.git
+.idea
+node_modules
+dist
+coverage
+.cache
+data
+runtime
+logs
+models
+docker/instance
+*.local.*
+secrets*.json
+config.json
+**/.env
+**/.env.*
+*.sqlite*
+*.log
+.reels-scratch
+.scratch-diar
+.agent-craft
+.DS_Store

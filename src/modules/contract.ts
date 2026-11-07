@@ -1,6 +1,7 @@
 import type { z } from "zod";
 import type { Json, Scope } from "../domain.js";
 import type { SpeechGate } from "../media/speech-gate.js";
+import type { PlatformOs } from "../platform/index.js";
 import type { DiagnosticSink } from "../ports.js";
 import type { QuietHoursConfig } from "../scheduling/quiet-hours.js";
 
@@ -134,6 +135,8 @@ export interface ModuleDefinition<S = unknown, P = unknown> {
   id: string;
   version: string;
   requires?: readonly string[];
+  /** Operating systems the module works on; absent means every platform Densemble supports. */
+  platforms?: readonly PlatformOs[];
   /** Module-owned validation of `modules.<id>.settings` (FR-005). */
   settings: z.ZodType<S>;
   /** Static; names `<id>_<verb>`. */

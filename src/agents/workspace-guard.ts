@@ -12,3 +12,10 @@ export function workspaceViolation(payload: unknown, forbiddenRoots: string[]): 
   if (forbiddenRoots.some((root) => new RegExp(`${escape(root)}(?![A-Za-z0-9_-])`).test(text))) return true;
   return /(?:^|[\\/"'\s=:])\.\.(?:[\\/"'\s]|$)|(?:^|[\\/"'\s=:])\.git(?:[\\/"'\s]|$)|~[\\/]|\$\{?HOME\b/.test(text.replaceAll("\\\\", "/").replaceAll("\\n", " "));
 }
+
+/** Tells the agent which linked workspaces it may also use, by name and path. Empty when there are none. */
+export function linkedWorkspacesInstruction(linked: { name: string; path: string }[]): string {
+  if (!linked.length) return "";
+  return " Linked workspaces you may also read and change, each with its own `AGENTS.md` rules for its folder: " +
+    linked.map((workspace) => `${workspace.name} (\`${workspace.path}\`)`).join(", ") + ".";
+}

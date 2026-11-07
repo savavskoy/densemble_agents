@@ -30,6 +30,8 @@ const settingsFix = "Виправте modules.reels.settings.folder у config.lo
 export const module: ModuleDefinition<ReelsConfig> = {
   id: "reels",
   version: "1.0.0",
+  // Ships with macOS defaults (Homebrew yt-dlp) and is validated only there; Linux comes in a later stage.
+  platforms: ["darwin"],
   requires: ["recordings"],
   settings: reelsSchema,
   abilities: [

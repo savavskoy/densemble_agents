@@ -13,6 +13,7 @@ import { SpeechGate } from "../media/speech-gate.js";
 import { createModuleHost } from "../modules/host.js";
 import type { ModuleLoader } from "../modules/loader.js";
 import { createCoreOffer } from "../modules/offer.js";
+import { currentPlatform } from "../platform/index.js";
 
 export interface DoctorReport {
   ready: boolean;
@@ -105,7 +106,8 @@ async function claudeChecks(config: LoadedConfig, factory?: ClaudeHostFactory): 
   return checks;
 }
 
-export async function doctor(config: LoadedConfig, options: { claudeHost?: ClaudeHostFactory; moduleLoader?: ModuleLoader } = {}): Promise<DoctorReport> {
+/** Zero-inference Copilot readiness: pinned runtime, service login and every agent's default model. */
+async function copilotChecks(config: LoadedConfig): Promise<DoctorReport["checks"]> {
   const checks: DoctorReport["checks"] = [];
   let client: CopilotClient | undefined;
   try {
@@ -143,13 +145,22 @@ export async function doctor(config: LoadedConfig, options: { claudeHost?: Claud
       }
     }
   }
+  return checks;
+}
+
+export async function doctor(config: LoadedConfig, options: { claudeHost?: ClaudeHostFactory; moduleLoader?: ModuleLoader } = {}): Promise<DoctorReport> {
+  const checks: DoctorReport["checks"] = [];
+  const platform = currentPlatform();
+  // Reaching doctor means the platform, user and (in a container) state mounts already passed the start guards.
+  checks.push({ component: "platform", ready: true, code: platform.container ? "PLATFORM_CONTAINER" : "PLATFORM_NATIVE" });
   for (const bot of config.config.bots) {
     const engine = botEngine(config.config, bot.id);
     checks.push({ component: `bot-engine:${bot.id}`, ready: true, code: engine === "copilot" ? "ENGINE_COPILOT" : "ENGINE_CLAUDE_CODE" });
   }
-  if (config.config.bots.some((bot) => botEngine(config.config, bot.id) === "claude-code")) {
-    checks.push(...await claudeChecks(config, options.claudeHost));
-  }
+  // Only the engines that bots actually use are checked: a Claude-only setup needs no Copilot login, and vice versa.
+  const engines = new Set(config.config.bots.map((bot) => botEngine(config.config, bot.id)));
+  if (engines.has("copilot")) checks.push(...await copilotChecks(config));
+  if (engines.has("claude-code")) checks.push(...await claudeChecks(config, options.claudeHost));
   for (const bot of config.config.bots) {
     try {
       const { Api } = await import("grammy");
@@ -166,7 +177,7 @@ export async function doctor(config: LoadedConfig, options: { claudeHost?: Claud
   checks.push({ component: "audio", ready: audio.ready, code: audio.code });
   const modules = await moduleChecks(config, options.moduleLoader);
   checks.push(...modules.checks);
-  const details = { ...(config.config.audio?.modelPath ? { voiceModel: basename(config.config.audio.modelPath) } : {}), ...modules.details };
+  const details = { platform: platform.id, ...(config.config.audio?.modelPath ? { voiceModel: basename(config.config.audio.modelPath) } : {}), ...modules.details };
   checks.push({ component: "mcp", ready: config.config.mcp.mode === "none",
     code: config.config.mcp.mode === "none" ? "MCP_EXPLICITLY_DISABLED" : "MCP_REQUIRES_TOOL_ACCEPTANCE" });
   return { ready: checks.every((check) => check.ready), checks, ...(Object.keys(details).length ? { details } : {}) };

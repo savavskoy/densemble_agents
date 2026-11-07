@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { basename, dirname, resolve } from "node:path";
 import { parseDocument } from "yaml";
 import { z } from "zod";
@@ -27,7 +27,7 @@ export interface AgentDefinition {
 export interface AgentSources {
   workspacePath: string;
   agentDefinitionsPath: string;
-  agentLaunchersPath: string;
+  agentLaunchersPath?: string | undefined;
 }
 
 function frontmatter(text: string): { metadata: z.infer<typeof metadataSchema>; body: string } {
@@ -69,10 +69,11 @@ export function discoverAllAgents(
   const result = discoverAgents(config);
   for (const workspace of config.workspaces ?? []) {
     if (!workspace.agentSource || workspace.path === config.workspacePath) continue;
+    const launchers = resolve(workspace.path, ".github", "agents");
     const local = discoverAgents({
       workspacePath: workspace.path,
       agentDefinitionsPath: resolve(workspace.path, "agent", "agents"),
-      agentLaunchersPath: resolve(workspace.path, ".github", "agents"),
+      agentLaunchersPath: existsSync(launchers) ? launchers : undefined,
     });
     for (const agent of local) {
       if (result.some((existing) => existing.id === agent.id)) throw new ConfigError("AGENT_DUPLICATE");
@@ -82,13 +83,15 @@ export function discoverAllAgents(
   return result;
 }
 
+/** Agents from launchers (`<id>.agent.md`) plus self-sufficient `AGENT.md` files whose own frontmatter declares the metadata. */
 export function discoverAgents(sources: AgentSources): AgentDefinition[] {
   const workspace = sources.workspacePath;
-  const launchers = sourcePath(workspace, sources.agentLaunchersPath, "directory");
+  const launchers = sources.agentLaunchersPath === undefined ? undefined : sourcePath(workspace, sources.agentLaunchersPath, "directory");
   const definitions = sourcePath(workspace, sources.agentDefinitionsPath, "directory");
   const result: AgentDefinition[] = [];
-  for (const entry of readdirSync(launchers).filter((name) => name.endsWith(".agent.md")).sort()) {
-    const launcherPath = sourcePath(workspace, resolve(launchers, entry), "file");
+  const launcherEntries = launchers === undefined ? [] : readdirSync(launchers).filter((name) => name.endsWith(".agent.md")).sort();
+  for (const entry of launcherEntries) {
+    const launcherPath = sourcePath(workspace, resolve(launchers!, entry), "file");
     const text = readFileSync(launcherPath, "utf8");
     const { metadata, body } = frontmatter(text);
     if (entry !== `${metadata.name}.agent.md`) throw new ConfigError("LAUNCHER_ID_MISMATCH");
@@ -113,11 +116,26 @@ export function discoverAgents(sources: AgentSources): AgentDefinition[] {
       ...(metadata.tools === undefined ? {} : { tools: metadata.tools }),
     });
   }
-  if (result.length === 0) throw new ConfigError("NO_AGENTS");
-  for (const entry of readdirSync(definitions, { withFileTypes: true })) {
-    if (entry.isDirectory() && !result.some((agent) => agent.canonicalPath === resolve(definitions, entry.name, "AGENT.md"))) {
-      throw new ConfigError("CANONICAL_WITHOUT_LAUNCHER");
-    }
+  for (const entry of readdirSync(definitions, { withFileTypes: true }).filter((item) => item.isDirectory()).sort((a, b) => a.name.localeCompare(b.name))) {
+    const definitionPath = resolve(definitions, entry.name, "AGENT.md");
+    if (result.some((agent) => agent.canonicalPath === definitionPath)) continue;
+    // No launcher: the AGENT.md must carry its own frontmatter (name, description, model).
+    if (!existsSync(definitionPath)) throw new ConfigError("CANONICAL_WITHOUT_LAUNCHER");
+    const canonicalPath = sourcePath(workspace, definitionPath, "file");
+    const text = readFileSync(canonicalPath, "utf8");
+    if (!text.replace(/^﻿/, "").startsWith("---")) throw new ConfigError("CANONICAL_WITHOUT_LAUNCHER");
+    const { metadata, body } = frontmatter(text);
+    if (metadata.name !== entry.name) throw new ConfigError("LAUNCHER_ID_MISMATCH");
+    if (result.some((agent) => agent.id === metadata.name)) throw new ConfigError("AGENT_DUPLICATE");
+    if (!body.trim()) throw new ConfigError("CANONICAL_EMPTY");
+    validateLinks(workspace, canonicalPath, text);
+    result.push({
+      id: metadata.name, description: metadata.description, defaultModel: metadata.model,
+      userInvocable: metadata["user-invocable"] ?? true, launcherPath: canonicalPath, canonicalPath,
+      ...(metadata.infer === undefined ? {} : { infer: metadata.infer }),
+      ...(metadata.tools === undefined ? {} : { tools: metadata.tools }),
+    });
   }
+  if (result.length === 0) throw new ConfigError("NO_AGENTS");
   return result;
 }

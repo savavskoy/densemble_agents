@@ -1,0 +1,38 @@
+# One isolated Densemble instance. The container sees only the mounts below — no home folder,
+# no Docker socket, no other host path. Guide: docs/platforms.md.
+#
+#   DENSEMBLE_INSTANCE   folder with config.json, secrets.local.json and state/{data,copilot,claude,home}
+#   DENSEMBLE_WORKSPACES folder with one subfolder per workspace, seen as /workspaces/<name>
+#   DENSEMBLE_MODELS     speech models (read-only)
+#   DENSEMBLE_UID/GID   Linux hosts: your `id -u` / `id -g`, so files in the workspace stay yours
+#
+# Put these in docker/.env (ignored by git) or export them, then from the repository root:
+#   docker compose -f docker/compose.yaml run --rm densemble login copilot
+#   docker compose -f docker/compose.yaml up -d
+name: ${DENSEMBLE_NAME:-densemble}
+services:
+  densemble:
+    image: densemble:local
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: runtime
+    user: "${DENSEMBLE_UID:-10001}:${DENSEMBLE_GID:-10001}"
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    # A runaway agent shell must not exhaust the host's process table.
+    pids_limit: 2048
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    stdin_open: true
+    tty: true
+    volumes:
+      - ${DENSEMBLE_INSTANCE:?set DENSEMBLE_INSTANCE}/config.json:/config/config.json:ro
+      - ${DENSEMBLE_INSTANCE:?set DENSEMBLE_INSTANCE}/secrets.local.json:/config/secrets.local.json:ro
+      - ${DENSEMBLE_INSTANCE:?set DENSEMBLE_INSTANCE}/state:/state
+      - ${DENSEMBLE_MODELS:?set DENSEMBLE_MODELS}:/models:ro
+      - ${DENSEMBLE_WORKSPACES:?set DENSEMBLE_WORKSPACES}:/workspaces

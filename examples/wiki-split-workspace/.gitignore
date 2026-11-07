@@ -1,0 +1,10 @@
+secrets.local.json
+*.local.*
+.DS_Store
+
+# Raw sources stay local
+/raw/*
+!/raw/README.md
+
+# The agents are a separate Git repository
+/agent/

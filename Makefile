@@ -14,7 +14,7 @@ NODE := $(firstword \
 	$(sort $(wildcard $(HOME)/.nvm/versions/node/v24.*/bin/node)) \
 	node)
 
-.PHONY: help build typecheck test doctor claude-login run install start stop restart status logs transcribe-status modules-status
+.PHONY: help build typecheck test doctor claude-login copilot-login run install start stop restart status logs transcribe-status modules-status
 
 help:
 	@printf '%s\n' \
@@ -32,6 +32,7 @@ help:
 		'make transcribe-status  Show recording transcription progress, queue and failures' \
 		'make modules-status  Show each module: enabled, state, cause and fix, status line' \
 		'make claude-login  Log the service-owned Claude Code home in with your Claude subscription' \
+		'make copilot-login Log the service-owned Copilot home in with your GitHub account' \
 		'' \
 		'First background launch: make install && make start' \
 		'Stop any existing npm/foreground instance before starting via launchd.' \
@@ -57,16 +58,13 @@ transcribe-status:
 modules-status:
 	$(NODE) dist/main.js modules-status --config "$(CONFIG)"
 
-# One-time, interactive: logs the pinned Claude Code binary in under the service-owned CLAUDE_CONFIG_DIR
-# from claudeCode.homePath. It never touches the interactive ~/.claude or stores an API key.
-claude-login:
-	@set -eu; \
-	home="$$($(NODE) -e 'const p=require("path"),f=p.resolve(process.argv[1]),c=JSON.parse(require("fs").readFileSync(f,"utf8"));if(!c.claudeCode)process.exit(3);console.log(p.resolve(p.dirname(f),c.claudeCode.homePath))' "$(CONFIG)")" || \
-		{ echo "claudeCode.homePath is not configured in $(CONFIG)" >&2; exit 2; }; \
-	mkdir -p "$$home"; chmod 700 "$$home"; \
-	env -i HOME="$$HOME" USER="$$USER" LOGNAME="$$USER" PATH=/usr/bin:/bin LANG=en_US.UTF-8 \
-		CLAUDE_CONFIG_DIR="$$home" DISABLE_AUTOUPDATER=1 \
-		./node_modules/@anthropic-ai/claude-agent-sdk-darwin-arm64/claude auth login
+# One-time, interactive: logs the pinned engine in under its service-owned home (claudeCode.homePath or
+# runtimeHomePath). It never touches the interactive ~/.claude or ~/.copilot, and stores no API key or token in config.
+claude-login: build
+	$(NODE) dist/main.js login claude --config "$(CONFIG)"
+
+copilot-login: build
+	$(NODE) dist/main.js login copilot --config "$(CONFIG)"
 
 run: build
 	$(NODE) dist/main.js start --config "$(CONFIG)"

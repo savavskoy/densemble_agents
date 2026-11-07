@@ -43,7 +43,7 @@ const mcpSchema = z.discriminatedUnion("type", [
 export const configSchema = z.object({
   workspacePath: nonempty,
   agentDefinitionsPath: nonempty,
-  agentLaunchersPath: nonempty,
+  agentLaunchersPath: nonempty.optional(),
   secretsPath: nonempty,
   runtimeDataPath: nonempty,
   runtimeHomePath: nonempty,
@@ -165,7 +165,9 @@ export function loadConfig(configPath: string, options: { codeRoot?: string } = 
   config.workspacePath = checkedPath(fromConfig(config.workspacePath), "directory");
   assertDisjoint(code, config.workspacePath);
   config.agentDefinitionsPath = sourcePath(config.workspacePath, fromConfig(config.agentDefinitionsPath), "directory");
-  config.agentLaunchersPath = sourcePath(config.workspacePath, fromConfig(config.agentLaunchersPath), "directory");
+  if (config.agentLaunchersPath !== undefined) {
+    config.agentLaunchersPath = sourcePath(config.workspacePath, fromConfig(config.agentLaunchersPath), "directory");
+  }
   config.secretsPath = checkedPath(fromConfig(config.secretsPath), "file");
   if (basename(config.secretsPath) !== "secrets.local.json" || isWithin(code, config.secretsPath)) {
     throw new ConfigError("EXTERNAL_CANONICAL_SECRETS_REQUIRED");
@@ -202,7 +204,7 @@ export function loadConfig(configPath: string, options: { codeRoot?: string } = 
       throw new ConfigError("UNSAFE_PATH_OVERLAP");
     }
     config.claudeCode.homePath = claudeHome;
-  } else if (config.bots.some((bot) => bot.engine === "claude-code")) {
+  } else if (config.bots.some((bot) => botEngine(config, bot.id) === "claude-code")) {
     throw new ConfigError("CLAUDE_CODE_CONFIG_REQUIRED");
   }
   config.skillDirectories = config.skillDirectories.map((path) => sourcePath(config.workspacePath, fromConfig(path), "directory"));
@@ -306,8 +308,9 @@ export function moduleEntries(config: Pick<ServiceConfig, "modules" | "recording
 }
 
 /** The engine a bot runs; bots without an explicit engine stay on Copilot. */
+/** A bot without an explicit `engine` runs on Claude Code. */
 export function botEngine(config: Pick<ServiceConfig, "bots">, botId: string): EngineId {
-  return config.bots.find((bot) => bot.id === botId)?.engine ?? "copilot";
+  return config.bots.find((bot) => bot.id === botId)?.engine ?? "claude-code";
 }
 
 export function authorizeScope(config: ServiceConfig, candidate: {
