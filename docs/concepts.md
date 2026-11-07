@@ -132,10 +132,10 @@ operating-system boundary, and the Mac's account can read every workspace.
 |---|---|
 | Configuration | `config.local.json` (ignored by Git) |
 | Secrets (bot tokens, MCP secrets) | external `secrets.local.json`, referenced by key |
-| Service state: sessions, inbox, runs, outbox, proactive items | SQLite in `runtimeDataPath` |
+| Service state: sessions, inbox, runs, outbox, proactive items | SQLite in `runtimeDataPath`; message texts and delivered replies are erased after seven days |
 | Incoming and outgoing files | `runtimeDataPath`; incoming files expire after at most seven days |
 | Conversation history, Copilot | `runtimeHomePath` (service-only Copilot home) |
-| Conversation history, Claude Code | `claudeCode.homePath/projects/` |
+| Conversation history, Claude Code | `claudeCode.homePath/projects/`; none with `claudeCode.persistSessions: false` |
 | Module data and state | `runtimeDataPath/modules/` |
 | Logs | fixed codes and scalar metadata only, beneath the data directory |
 | Agents, knowledge, current context | the workspaces; Densemble writes there only through agent tools and modules |

@@ -19,6 +19,9 @@ import { createCoreOffer } from "./modules/offer.js";
 import { startModulesStateWriter } from "./modules/state.js";
 import { startModuleNotices } from "./modules/notices.js";
 
+/** How long processed message bodies and delivered replies stay in the state database. */
+const stateRetentionMs = 7 * 24 * 60 * 60_000;
+
 export async function startService(config: LoadedConfig, options: { shutdownTimeoutMs?: number } = {}): Promise<{ stop(): Promise<void> }> {
   const diagnostics = createDiagnostics({ botIds: config.config.bots.map((bot) => bot.id) });
   const lock = acquireProcessLock(config.config.runtimeDataPath);
@@ -102,6 +105,15 @@ export async function startService(config: LoadedConfig, options: { shutdownTime
       config, store, diagnostics, download: telegram.downloadFile, audio: audioSettings(config.config), speechGate,
     });
     const recovery = store.recover();
+    const state = store;
+    let stateCleaned = 0;
+    // Message bodies and delivered replies are kept only as long as recovery and dedup may need them.
+    const cleanState = () => {
+      stateCleaned = Date.now();
+      try { state.cleanup({ before: stateCleaned - stateRetentionMs }); }
+      catch { diagnostics.record("STATE_RETENTION_FAILED"); }
+    };
+    cleanState();
     await media.cleanup();
     await host.start();
     application = createApplication({ config, store, runtime, media, delivery: telegram.transport, diagnostics,
@@ -123,6 +135,7 @@ export async function startService(config: LoadedConfig, options: { shutdownTime
     await telegram.start(application);
     timer = setInterval(() => {
       if (closing || maintenance) return;
+      if (Date.now() - stateCleaned >= 3_600_000) cleanState();
       maintenance = media.cleanup().catch(() => { diagnostics.record("MEDIA_RETENTION_FAILED"); })
         .finally(() => { maintenance = undefined; });
     }, 60_000);

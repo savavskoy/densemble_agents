@@ -145,6 +145,16 @@ describe("Claude Code runtime", () => {
     await expect(second.runtime.open({ session: { ...second.session, providerSessionId: second.session.id }, onEvent: () => undefined,
       emptyHistory: false })).rejects.toThrow("SESSION_HISTORY_MISSING");
   });
+  it("keeps no transcripts when persistSessions is off and starts a lost conversation over", async () => {
+    const f = setup();
+    f.config.config.claudeCode!.persistSessions = false;
+    await f.runtime.open({ session: { ...f.session, providerSessionId: f.session.id }, onEvent: () => undefined,
+      emptyHistory: false });
+    const options = f.hosts[0]!.options!;
+    expect(options.persistSession).toBe(false);
+    expect(options.resume).toBeUndefined();
+    expect(options.sessionId).toBe(f.session.id);
+  });
   it("streams root text into the preview and completes on the matching result", async () => {
     const { open, send, message, hosts, events } = setup();
     await open();

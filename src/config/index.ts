@@ -64,7 +64,7 @@ export const configSchema = z.object({
     minIntervalMs: z.number().int().min(60_000).optional(),
     maxActiveItemsPerAgent: z.number().int().min(1).optional(),
   }).strict().optional(),
-  claudeCode: z.object({ homePath: nonempty, defaultModel: nonempty }).strict().optional(),
+  claudeCode: z.object({ homePath: nonempty, defaultModel: nonempty, persistSessions: z.boolean().optional() }).strict().optional(),
   bots: z.array(z.object({
     id: name, agentId: name, tokenRef: secretRef,
     engine: z.enum(engineIds as [EngineId, ...EngineId[]]).optional(), model: nonempty.optional(),

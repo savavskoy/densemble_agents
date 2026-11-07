@@ -212,6 +212,8 @@ export function createClaudeRuntime(options: ClaudeRuntimeOptions): ControlledRu
   const { config, diagnostics } = options;
   const hostFactory = options.hostFactory ?? supervisedClaudeHost(config, diagnostics);
   const slots = new Map<string, Slot>();
+  // Off: Claude Code keeps no transcripts; a session forgets its conversation when its process ends.
+  const persist = () => config.config.claudeCode?.persistSessions !== false;
   const probes = new Set<ClaudeHost>();
   let shuttingDown = false;
   let catalog: { at: number; models: ModelInfo[] } | undefined;
@@ -528,7 +530,7 @@ export function createClaudeRuntime(options: ClaudeRuntimeOptions): ControlledRu
         systemPrompt: { type: "preset", preset: "claude_code", append },
         mcpServers: { densemble, ...(mcpAccess ? mcpServers : {}) },
         permissionMode: "default", permissionPrompts: "host", canUseTool, hooks: { PreToolUse: [{ hooks: [preToolUse] }] },
-        includePartialMessages: true, persistSession: true, env: claudeEnvironment(config), stderr: () => undefined,
+        includePartialMessages: true, persistSession: persist(), env: claudeEnvironment(config), stderr: () => undefined,
         ...(resume ? { resume: session.id } : { sessionId: session.id }),
       },
     };
@@ -606,7 +608,8 @@ export function createClaudeRuntime(options: ClaudeRuntimeOptions): ControlledRu
           const history = (await claudeTranscripts(claudeHome(config), session.id)).length > 0;
           // A session that never completed a turn has no transcript to lose; recreate it under the same ID.
           const empty = supplied.emptyHistory ?? session.generation === 0;
-          if (provider && !history && !empty) throw new RuntimeError("SESSION_HISTORY_MISSING");
+          // Without persisted sessions a lost transcript is expected: the conversation starts over.
+          if (persist() && provider && !history && !empty) throw new RuntimeError("SESSION_HISTORY_MISSING");
           const { settings, expected } = await sessionOptions(slot, supplied, history);
           supplied.signal?.throwIfAborted();
           if (slot.closing) throw new RuntimeError("SESSION_OPEN_CANCELLED");

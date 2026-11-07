@@ -95,7 +95,10 @@ explicitly if launched from elsewhere.
   `engine`) requires
   `claudeCode: { homePath, defaultModel }`. `homePath` is an existing private
   service-owned `CLAUDE_CONFIG_DIR`, disjoint from the workspace(s), `~/.claude`,
-  the Copilot home, data, config and secrets. A persona may be bound once per engine.
+  the Copilot home, data, config and secrets. Optional `persistSessions: false`
+  stops Claude Code from keeping transcripts: a session remembers its conversation
+  only while its process lives and starts over after a restart (no
+  `SESSION_HISTORY_MISSING`). A persona may be bound once per engine.
   `botEngine(config, botId)` resolves the effective engine.
 - `discoverAgents(sources)` parses launcher YAML, checks metadata/canonical files
   and local Markdown links, and returns **all** agents. `userInvocable` governs bot
