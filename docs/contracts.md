@@ -90,16 +90,36 @@ explicitly if launched from elsewhere.
   Managed-policy approval requirements, sandbox escalation, detached processes
   and excluded tools remain denied. Questions are not auto-answered. This
   service-wide owner setting takes effect on restart, never via agent input.
-- Optional `bots[].engine` is `"claude-code"` (default) or `"copilot"`; optional
-  `bots[].model` overrides the new-session model. A Claude Code bot (including one without
-  `engine`) requires
-  `claudeCode: { homePath, defaultModel }`. `homePath` is an existing private
-  service-owned `CLAUDE_CONFIG_DIR`, disjoint from the workspace(s), `~/.claude`,
-  the Copilot home, data, config and secrets. Optional `persistSessions: false`
-  stops Claude Code from keeping transcripts: a session remembers its conversation
-  only while its process lives and starts over after a restart (no
-  `SESSION_HISTORY_MISSING`). A persona may be bound once per engine.
-  `botEngine(config, botId)` resolves the effective engine.
+- Optional `bots[].engine` is `"claude-code"` (default), `"copilot"` or `"cursor"`;
+  optional `bots[].model` overrides the new-session model. A Claude Code bot
+  (including one without `engine`) requires `claudeCode: { homePath, defaultModel }`.
+  `homePath` is an existing private service-owned `CLAUDE_CONFIG_DIR`, disjoint from
+  the workspace(s), `~/.claude`, the Copilot home, the Cursor home, data, config and
+  secrets. Optional `persistSessions: false` stops Claude Code from keeping
+  transcripts: a session remembers its conversation only while its process lives and
+  starts over after a restart (no `SESSION_HISTORY_MISSING`). A persona may be bound
+  once per engine. `botEngine(config, botId)` resolves the effective engine.
+- A Cursor bot requires `cursor: { homePath, defaultModel }`. `homePath` is an
+  existing private directory, disjoint from the workspace(s), `~/.cursor`,
+  `~/.claude`, the Copilot home, the Claude home, data, config and secrets. The
+  login key is read from `<homePath>/auth.json` (`FileCredentialStore`) and never
+  from `CURSOR_API_KEY` or `secrets.local.json`. Optional `persistSessions: false`
+  (the default is to persist) never calls `Agent.resume`: the next open deletes the
+  previous local agent. An empty history does that cleanup even when persistence is
+  on. `defaultModel` and `bots[].model`
+  must be accepted by `Cursor.models.list` for that key; an unknown id is
+  `MODEL_UNAVAILABLE`. With `mcp.mode: "allowlist"` open fails closed with
+  `MCP_TOOL_ALLOWLIST_REQUIRED` because the SDK has no per-tool allowlist.
+  `settingSources` is always empty. `sandboxOptions.enabled` is false for the owner
+  and true for a guest. A guest open also reads the service user's
+  `~/.cursor/sandbox.json`: a missing file or `{ "type": "insecure_none" }` is
+  inactive; any other JSON, including a foreign shape, is
+  `CURSOR_SANDBOX_POLICY_CONFLICT`. Local agent ids match `agent-…`. Cloud ids
+  (`bc-…`) are `UNOWNED_PROVIDER_SESSION` or `CURSOR_ENGINE_UNAVAILABLE`.
+  `permissionMode` is not applied to the SDK's own tools: there is no approval
+  callback, so `manual` does not prompt before shell or file edits. Owner
+  `skillDirectories` are not mounted. Export, proactivity and module abilities are
+  custom tools and still go through the application.
 - `discoverAgents(sources)` parses launcher YAML, checks metadata/canonical files
   and local Markdown links, and returns **all** agents. `userInvocable` governs bot
   bindings only. `infer` is independent and absent unless explicitly declared.
@@ -556,14 +576,28 @@ prints a launchd plist on macOS or a systemd user unit on Linux.
 
 `AgentRuntime` (`open`, `execute`, `setModel`, `models`, `disconnect`,
 `deleteSession`, `shutdown`) uses `RuntimeCommand`/`RuntimeEvent`, never SDK types.
-`Session.engine` (`copilot` | `claude-code`, SQLite migration 3, default
-`copilot`) is fixed at creation. The service composes an engine router that
-dispatches every call by that engine; each engine refuses foreign sessions with
-`SESSION_ENGINE_MISMATCH`. `deleteSession(..., engine)` receives the engine from
-the deletion journal (legacy entries are Copilot). Optional
+`Session.engine` (`copilot` | `claude-code` | `cursor`) is fixed at creation.
+Migration 3 added the column (default `copilot` for rows that predate engines).
+Migration 5 rebuilds `sessions` with foreign keys off — a parent table cannot be
+dropped while they are enforced, and the pragma cannot change inside a transaction —
+so the check can include `cursor`. The service composes an engine router that
+dispatches every call by that engine. A missing runtime is
+`CLAUDE_CODE_NOT_CONFIGURED`, `CURSOR_NOT_CONFIGURED` or `ENGINE_NOT_CONFIGURED`.
+Each engine refuses foreign sessions with `SESSION_ENGINE_MISMATCH`.
+`deleteSession(..., engine)` receives the engine from the deletion journal (legacy
+entries are Copilot). A Cursor journal entry accepts only a local agent id
+(`agent-…`) or null; anything else, including `densemble-…` and `bc-…`, is
+`DELETION_JOURNAL_INVALID`. Deletion resolves the cwd from the JSONL agent store
+for that id and does not guess the workspace the caller still has. Optional
 `supportsSteering(session) === false` (Claude Code) makes the application leave
-new input queued for the next turn instead of steering. Claude Code provider
-session IDs are the Densemble session UUID; Copilot's remain `densemble-<uuid>`.
+new input queued for the next turn instead of steering. Cursor and Copilot report
+steering support. A Cursor steer that does not return `complete_delivered` is
+`STEERING_UNSUPPORTED`. Claude Code provider session IDs are the Densemble session
+UUID; Copilot's remain `densemble-<uuid>`; Cursor's are the local agent id.
+`login cursor` runs `Cursor.auth.login` into `cursor.homePath` under the instance
+lock. `doctor` adds `cursor-authentication` and, when that is ready,
+`cursor-models` (`ENGINE_CURSOR` on `bot-engine:<id>`), and only when a bot's
+engine is `cursor`.
 `MediaPreparation` (`prepare`, `transcribe`, `exportFile`, `cleanup`) handles IO,
 format/resource validation, subprocess cancellation and filesystem confinement.
 Its production `releaseRun`/`removeArtifacts` hooks release pins only after

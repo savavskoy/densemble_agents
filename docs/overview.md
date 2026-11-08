@@ -6,7 +6,7 @@ Apple Silicon Mac or a Linux machine, or isolated in Docker on any computer
 ([platforms](platforms.md)): each agent (persona) gets its own Telegram bot,
 works inside
 a knowledge workspace, and thinks with a model from your own subscription
-(GitHub Copilot or Claude). There is no cloud control plane and no HTTP server.
+(GitHub Copilot, Claude or Cursor). There is no cloud control plane and no HTTP server.
 
 Terms used below (persona, workspace, session, module, engine) are defined in
 [concepts](concepts.md). Installation is in [INSTALL.md](../INSTALL.md), setup and commands in
@@ -31,16 +31,17 @@ technical contracts in [contracts](contracts.md).
   start or switch conversations, `/model` to change the model, `/status` for the
   service state.
 - Agents ask clarifying questions as ordinary messages, one at a time.
-- Messages sent while the agent is answering steer the current answer (Copilot)
-  or wait for the next turn (Claude Code).
+- Messages sent while the agent is answering steer the current answer (Copilot
+  and Cursor) or wait for the next turn (Claude Code).
 
 ### Agents
 
 - Personas are Markdown files in the workspace; the owner writes them, Densemble
   loads them. A persona can consult other personas of the same workspace.
 - Skills (reusable how-to instructions) are available in the owner's sessions.
-- Two engines side by side: **Claude Code** (default) and **Copilot**, chosen per
-  bot in the configuration. One persona can be served by a bot of each engine.
+- Three engines side by side: **Claude Code** (default), **Copilot** and
+  **Cursor**, chosen per bot in the configuration. One persona can be served by
+  a bot of each engine.
 - MCP servers are off unless explicitly allowlisted, server by server and tool by
   tool, with secrets passed by reference.
 - Permissions: **autopilot** (default) approves ordinary tool actions; **manual**
@@ -111,8 +112,9 @@ recovers.
 
 - Native on Apple Silicon macOS and glibc Linux only; Windows through Docker.
   Recordings and reels modules work only natively on macOS.
-- Models come only from the owner's Copilot or Claude subscription; there is no
-  API-key engine.
+- Models come only from the owner's Copilot, Claude or Cursor subscription; there
+  is no API-key engine. A Cursor bot uses the key minted by `make cursor-login`,
+  never a key pasted into the configuration.
 - Group and forum chats are for the owner only.
 - No per-user request limits.
 - Conversation history is always stored; there is no history-free mode.

@@ -15,7 +15,7 @@ there with `PLATFORM_UNSUPPORTED`. On Windows use Docker Desktop.
 
 | Feature | macOS native | Linux native / Docker |
 |---|---|---|
-| Telegram chats, Copilot and Claude Code engines, `/stop`, `/model` | yes | yes |
+| Telegram chats, Copilot, Claude Code and Cursor engines, `/stop`, `/model` | yes | yes |
 | Voice messages, documents, photos, file export | yes | yes |
 | Proactivity, multi-user workspaces, permissions | yes | yes |
 | `doctor`, backup / restore, `modules-status` | yes | yes |
@@ -83,15 +83,18 @@ From the repository root:
 
 ```sh
 docker compose -f docker/compose.yaml build
-docker compose -f docker/compose.yaml run --rm densemble login claude    # or: login copilot
+docker compose -f docker/compose.yaml run --rm densemble login claude    # or: login copilot, login cursor
 docker compose -f docker/compose.yaml run --rm densemble doctor
 docker compose -f docker/compose.yaml up -d
 docker compose -f docker/compose.yaml logs -f
 ```
 
 `login copilot` prints a GitHub URL and a code; `login claude` prints a URL and asks for the code
-shown after you sign in. Finish in a browser on any device. The login is stored in the instance's
-`state/` and is separate from your own Copilot/Claude logins; it survives restarts and new images.
+shown after you sign in; `login cursor` opens a browser login and stores the minted key. Finish in
+a browser on any device. The login is stored in the instance's `state/` and is separate from your
+own Copilot, Claude and Cursor logins; it survives restarts and new images. Cursor needs a `cursor`
+block whose `homePath` is on the state mount, for example `/state/cursor` (create that directory
+before login). Setup and limits: [native setup → Cursor](native-setup.md#cursor).
 Run `login` while the instance is stopped (`down`), because it takes the instance lock. The image
 sets `DENSEMBLE_CONFIG=/config/config.json`, so container commands need no `--config`.
 

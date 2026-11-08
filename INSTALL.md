@@ -232,6 +232,8 @@ and write `HOME_DIR/instance/config.json` with these changes; keep the `/state/â
 - `ownerId`: the numeric ID; `ownerName`: how the person wants to be addressed (ask, default: first name);
 - `bots`: one bot `{ "id": "glim-bot", "agentId": "glim", "tokenRef": "telegram.glim_bot_token" }`;
   it runs on Claude by default; for the **Copilot** engine add `"engine": "copilot"`;
+  for the **Cursor** engine add `"engine": "cursor"` and a `cursor` block
+  ([native setup](docs/native-setup.md#cursor));
 - `bindings`: one entry `{ "botId": "glim-bot", "chatId": <ownerId>, "kind": "private", "topicId": null }`;
 - **only if there are other people**, for each of them:
   - an entry in `users`: `{ "telegramUserId": <their ID>, "displayName": "<name>", "allowedBotIds": ["glim-bot"] }`;
