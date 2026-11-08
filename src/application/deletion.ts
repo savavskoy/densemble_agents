@@ -3,6 +3,7 @@ import { join, resolve } from "node:path";
 import { z } from "zod";
 import type { Attachment, EngineId, Scope } from "../domain.js";
 import { assertScope, engineIds } from "../domain.js";
+import { cursorAgentId } from "../agents/cursor.js";
 import { RuntimeError } from "../agents/contracts.js";
 
 const uuid = z.string().uuid();
@@ -40,9 +41,15 @@ export class DeletionJournal {
     if (!parsed.success) throw new RuntimeError("DELETION_JOURNAL_INVALID");
     const intent = parsed.data;
     assertScope(intent.scope);
-    const ownedProvider = intent.engine === "claude-code" ? intent.sessionId : `densemble-${intent.sessionId}`;
-    if (intent.providerSessionId && intent.providerSessionId !== ownedProvider) {
-      throw new RuntimeError("DELETION_JOURNAL_INVALID");
+    if (intent.engine === "cursor") {
+      if (intent.providerSessionId !== null && !cursorAgentId.test(intent.providerSessionId)) {
+        throw new RuntimeError("DELETION_JOURNAL_INVALID");
+      }
+    } else {
+      const ownedProvider = intent.engine === "claude-code" ? intent.sessionId : `densemble-${intent.sessionId}`;
+      if (intent.providerSessionId && intent.providerSessionId !== ownedProvider) {
+        throw new RuntimeError("DELETION_JOURNAL_INVALID");
+      }
     }
     for (const artifact of intent.artifacts) {
       if (artifact.sessionId !== intent.sessionId || JSON.stringify(artifact.scope) !== JSON.stringify(intent.scope)) {

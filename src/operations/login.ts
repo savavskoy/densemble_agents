@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
+import { cursorHome } from "../agents/cursor.js";
 import { claudeHome, pinnedClaudePath, serviceUser } from "../agents/claude-env.js";
 import { pinnedRuntimePath } from "../agents/copilot.js";
 import { enginePlatform } from "../agents/platform.js";
@@ -32,6 +33,27 @@ export async function loginCommand(config: LoadedConfig, engine: LoginEngine, pl
   const serviceHome = claudeHome(config);
   return { executable: await pinnedClaudePath(), home: serviceHome, args: ["auth", "login"],
     env: { ...base, USER: user, LOGNAME: user, CLAUDE_CONFIG_DIR: serviceHome, DISABLE_AUTOUPDATER: "1", DISABLE_TELEMETRY: "1" } };
+}
+
+/**
+ * Browser login for the service-owned Cursor home only. The minted key is stored under `cursor.homePath`
+ * and never written into config or the interactive `~/.cursor` directory.
+ */
+export async function runCursorLogin(config: LoadedConfig): Promise<number> {
+  const home = cursorHome(config);
+  await mkdir(home, { recursive: true, mode: 0o700 });
+  checkedPath(home, "directory");
+  try {
+    const { Cursor, FileCredentialStore } = await import("@cursor/sdk");
+    await Cursor.auth.login({
+      store: new FileCredentialStore(join(home, "auth.json")),
+      apiKeyName: "densemble",
+    });
+    return 0;
+  } catch {
+    process.stderr.write("Cursor login failed. Finish it in the browser, then run make cursor-login again.\n");
+    return 1;
+  }
 }
 
 /** Runs the login interactively in this terminal; resolves with the engine's exit code. */

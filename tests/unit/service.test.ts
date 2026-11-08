@@ -36,6 +36,7 @@ vi.mock("../../src/storage/index.js", () => ({
 vi.mock("../../src/agents/index.js", async () => ({
   createCopilotRuntime: () => harness.runtime,
   createClaudeRuntime: () => { throw new Error("UNEXPECTED_CLAUDE_RUNTIME"); },
+  createCursorRuntime: () => { throw new Error("UNEXPECTED_CURSOR_RUNTIME"); },
   createEngineRouter: (await vi.importActual<typeof import("../../src/agents/router.js")>("../../src/agents/router.js")).createEngineRouter,
 }));
 vi.mock("../../src/media/index.js", () => ({ createMediaPipeline: () => harness.media }));

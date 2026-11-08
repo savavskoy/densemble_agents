@@ -2,7 +2,7 @@ import { join } from "node:path";
 import type { LoadedConfig } from "./config/index.js";
 import { defaultQuietHours, moduleEntries } from "./config/index.js";
 import { createApplication, type Application } from "./application/index.js";
-import { createClaudeRuntime, createCopilotRuntime, createEngineRouter, type ControlledRuntime } from "./agents/index.js";
+import { createClaudeRuntime, createCopilotRuntime, createCursorRuntime, createEngineRouter, type ControlledRuntime } from "./agents/index.js";
 import { bounded } from "./agents/contracts.js";
 import { createMediaPipeline } from "./media/index.js";
 import type { MediaPipeline } from "./media/index.js";
@@ -89,6 +89,7 @@ export async function startService(config: LoadedConfig, options: { shutdownTime
       engines: {
         copilot,
         ...(config.config.claudeCode ? { "claude-code": createClaudeRuntime({ config, diagnostics, modules: host }) } : {}),
+        ...(config.config.cursor ? { cursor: createCursorRuntime({ config, diagnostics, modules: host }) } : {}),
       },
       sessionEngine: (scope, sessionId) => store?.sessions.get(scope, sessionId)?.engine,
       // Process journals are engine-neutral; the Copilot runtime recovers all of them once.

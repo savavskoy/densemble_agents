@@ -42,9 +42,18 @@ async function main(): Promise<void> {
   if (args.command === "login") {
     // Holding the instance lock keeps a running service from reading a half-written login.
     const { acquireProcessLock } = await import("./storage/process-lock.js");
-    const { loginCommand, runLogin } = await import("./operations/login.js");
     const lock = acquireProcessLock(config.config.runtimeDataPath);
-    try { process.exitCode = await runLogin(await loginCommand(config, args.engine!, platform)); } finally { lock.release(); }
+    try {
+      if (args.engine === "cursor") {
+        const { runCursorLogin } = await import("./operations/login.js");
+        process.exitCode = await runCursorLogin(config);
+      } else if (args.engine === "copilot" || args.engine === "claude") {
+        const { loginCommand, runLogin } = await import("./operations/login.js");
+        process.exitCode = await runLogin(await loginCommand(config, args.engine, platform));
+      } else {
+        throw new Error("LOGIN_ENGINE_REQUIRED");
+      }
+    } finally { lock.release(); }
     return;
   }
   if (args.command === "recordings-status") {

@@ -6,7 +6,7 @@ export interface CommandLine {
   target?: string;
   json?: boolean;
   /** `login` only. */
-  engine?: "copilot" | "claude";
+  engine?: "copilot" | "claude" | "cursor";
 }
 
 /** `--config` wins; otherwise `DENSEMBLE_CONFIG` (set by the container image), then `config.local.json`. */
@@ -18,7 +18,7 @@ export function parseArguments(args: string[], env: NodeJS.ProcessEnv = process.
     throw new Error("UNKNOWN_COMMAND");
   }
   const engine = command === "login" ? args[1] : undefined;
-  if (command === "login" && engine !== "copilot" && engine !== "claude") throw new Error("LOGIN_ENGINE_REQUIRED");
+  if (command === "login" && engine !== "copilot" && engine !== "claude" && engine !== "cursor") throw new Error("LOGIN_ENGINE_REQUIRED");
   const options = new Map<string, string>();
   let json = false;
   for (let index = explicit ? (engine ? 2 : 1) : 0; index < args.length; index += 2) {
@@ -38,5 +38,5 @@ export function parseArguments(args: string[], env: NodeJS.ProcessEnv = process.
   if ((command === "backup" || command === "restore") !== Boolean(target)) throw new Error("COMMAND_TARGET_REQUIRED_OR_UNEXPECTED");
   return { command: command as CommandName, config: options.get("--config") ?? env.DENSEMBLE_CONFIG ?? "config.local.json",
     ...(target ? { target } : {}), ...(json ? { json } : {}),
-    ...(engine === "copilot" || engine === "claude" ? { engine } : {}) };
+    ...(engine === "copilot" || engine === "claude" || engine === "cursor" ? { engine } : {}) };
 }

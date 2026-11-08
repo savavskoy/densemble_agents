@@ -65,6 +65,7 @@ export const configSchema = z.object({
     maxActiveItemsPerAgent: z.number().int().min(1).optional(),
   }).strict().optional(),
   claudeCode: z.object({ homePath: nonempty, defaultModel: nonempty, persistSessions: z.boolean().optional() }).strict().optional(),
+  cursor: z.object({ homePath: nonempty, defaultModel: nonempty, persistSessions: z.boolean().optional() }).strict().optional(),
   bots: z.array(z.object({
     id: name, agentId: name, tokenRef: secretRef,
     engine: z.enum(engineIds as [EngineId, ...EngineId[]]).optional(), model: nonempty.optional(),
@@ -206,6 +207,20 @@ export function loadConfig(configPath: string, options: { codeRoot?: string } = 
     config.claudeCode.homePath = claudeHome;
   } else if (config.bots.some((bot) => botEngine(config, bot.id) === "claude-code")) {
     throw new ConfigError("CLAUDE_CODE_CONFIG_REQUIRED");
+  }
+  if (config.cursor) {
+    // A separate, service-owned Cursor home: never the interactive ~/.cursor, never shared with Copilot or Claude state.
+    const cursorHome = checkedPath(fromConfig(config.cursor.homePath), "directory");
+    for (const other of [config.workspacePath, interactive, resolve(homedir(), ".claude"), resolve(homedir(), ".cursor"),
+      config.runtimeDataPath, config.runtimeHomePath, ...(config.claudeCode ? [config.claudeCode.homePath] : [])]) {
+      assertDisjoint(cursorHome, other);
+    }
+    if (isWithin(cursorHome, code) || isWithin(cursorHome, file) || isWithin(cursorHome, config.secretsPath)) {
+      throw new ConfigError("UNSAFE_PATH_OVERLAP");
+    }
+    config.cursor.homePath = cursorHome;
+  } else if (config.bots.some((bot) => botEngine(config, bot.id) === "cursor")) {
+    throw new ConfigError("CURSOR_CONFIG_REQUIRED");
   }
   config.skillDirectories = config.skillDirectories.map((path) => sourcePath(config.workspacePath, fromConfig(path), "directory"));
   if (!config.skillDirectories.includes(resolve(config.workspacePath, "agent", "skills")) ||

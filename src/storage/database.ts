@@ -150,6 +150,22 @@ CREATE INDEX proactive_items_due ON proactive_items(status,next_due_at);
 CREATE INDEX proactive_items_conversation ON proactive_items(conversation_id,status);
 INSERT INTO proactive_occurrences SELECT * FROM proactive_occurrences_keep;
 DROP TABLE proactive_occurrences_keep;
+`, `
+-- The engine check cannot be altered in place. Rebuild sessions so 'cursor' is allowed.
+-- This statement runs with foreign keys off: sessions is referenced by conversations, inputs, runs and outbox.
+CREATE TABLE sessions_next (
+ id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL REFERENCES conversations(id),
+ agent_id TEXT NOT NULL, workspace TEXT NOT NULL, provider_session_id TEXT UNIQUE,
+ applied_model TEXT NOT NULL, pending_model TEXT,
+ generation INTEGER NOT NULL DEFAULT 0 CHECK(generation >= 0),
+ created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
+ engine TEXT NOT NULL DEFAULT 'copilot' CHECK(engine IN ('copilot','claude-code','cursor')),
+ UNIQUE(id,conversation_id)
+);
+INSERT INTO sessions_next(id,conversation_id,agent_id,workspace,provider_session_id,applied_model,pending_model,generation,created_at,updated_at,engine)
+ SELECT id,conversation_id,agent_id,workspace,provider_session_id,applied_model,pending_model,generation,created_at,updated_at,engine FROM sessions;
+DROP TABLE sessions;
+ALTER TABLE sessions_next RENAME TO sessions;
 `];
 
 export class Connection {
@@ -163,12 +179,41 @@ export class Connection {
       this.db.pragma("synchronous = FULL");
       const version = this.db.pragma("user_version", { simple: true }) as number;
       if (version > migrations.length) throw new StateError("SCHEMA_TOO_NEW");
-      this.atomic(() => {
-        for (let index = version; index < migrations.length; index++) {
-          this.db.exec(migrations[index]!);
-          this.db.pragma(`user_version = ${index + 1}`);
+      // Migrations 1–4 rely on foreign keys (the initiator rebuild cascades). The sessions rebuild cannot:
+      // a parent table cannot be dropped while those keys are enforced, and the pragma cannot change inside a transaction.
+      const keyed = 4;
+      if (version < Math.min(keyed, migrations.length)) {
+        this.atomic(() => {
+          for (let index = version; index < keyed && index < migrations.length; index++) {
+            this.db.exec(migrations[index]!);
+            this.db.pragma(`user_version = ${index + 1}`);
+          }
+        });
+      }
+      let current = this.db.pragma("user_version", { simple: true }) as number;
+      if (current === 4 && migrations.length > 4) {
+        this.db.pragma("foreign_keys = OFF");
+        try {
+          this.db.exec("BEGIN IMMEDIATE");
+          this.db.exec(migrations[4]!);
+          this.db.pragma("user_version = 5");
+          this.db.exec("COMMIT");
+        } catch (error) {
+          try { this.db.exec("ROLLBACK"); } catch { /* the transaction is already closed */ }
+          throw error;
+        } finally {
+          this.db.pragma("foreign_keys = ON");
         }
-      });
+        current = 5;
+      }
+      if (current < migrations.length) {
+        this.atomic(() => {
+          for (let index = current; index < migrations.length; index++) {
+            this.db.exec(migrations[index]!);
+            this.db.pragma(`user_version = ${index + 1}`);
+          }
+        });
+      }
     } catch (error) {
       this.db.close();
       throw error;

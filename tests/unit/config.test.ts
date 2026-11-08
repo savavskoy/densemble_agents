@@ -559,6 +559,19 @@ describe("per-bot engine selection", () => {
     config.bots[1] = { ...config.bots[1]!, engine: "claude-code" };
     expect(load().config.bots.map((bot) => bot.agentId)).toEqual(["helper-one", "helper-one"]);
   });
+  it("requires a cursor block for a Cursor bot and keeps that home away from the other engines", () => {
+    config.bots[1] = { ...config.bots[1]!, engine: "cursor" };
+    expect(load).toThrow("CURSOR_CONFIG_REQUIRED");
+    mkdirSync(join(code, "runtime/cursor"), { recursive: true });
+    config.cursor = { homePath: "./runtime/cursor", defaultModel: "grok-4.7" };
+    const loaded = load();
+    expect(loaded.config.cursor?.homePath).toBe(join(code, "runtime/cursor"));
+    expect(botEngine(loaded.config, "bot-two")).toBe("cursor");
+    for (const homePath of ["./runtime/copilot", "./data", source, code]) {
+      config.cursor = { homePath, defaultModel: "grok-4.7" };
+      expect(load, homePath).toThrow("UNSAFE_PATH_OVERLAP");
+    }
+  });
   it("rejects unknown engines", () => {
     (config.bots[1] as { engine?: string }).engine = "gemini";
     expect(load).toThrow("CONFIG_SCHEMA_INVALID");
