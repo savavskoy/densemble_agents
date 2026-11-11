@@ -30,11 +30,11 @@ Telegram. The first one, **Glim**, is waiting at the door.
 
 - **A team, not one chatbot.** Agents with their own roles and characters, one Telegram bot each.
   Start with Glim, your personal assistant; add specialists when you need them.
-- **Your subscription, not API bills.** Runs on your Claude (Pro/Max) or GitHub Copilot
-  subscription through their official tools.
+- **Your subscription, not API bills.** Runs on your Claude (Pro/Max), GitHub Copilot
+  or Cursor subscription through their official tools.
 - **Knowledge you own.** Everything the agents know and write is plain Markdown in a folder on
-  your computer. Claude Code, Copilot and Codex read the same files, so you can leave any time
-  and keep everything.
+  your computer. Claude Code, Copilot, Cursor and Codex read the same files, so you can leave
+  any time and keep everything.
 - **Private by design.** No web server, nothing exposed to the internet: Densemble only talks to
   Telegram and your AI provider. In Docker, the agents see only the folder you give them.
 - **Voice, files and more.** Voice messages (recognised locally), documents and photos,
@@ -44,7 +44,7 @@ Telegram. The first one, **Glim**, is waiting at the door.
 
 - A computer with **Docker** (macOS, Windows or Linux) that is on while you use the bots.
 - **Telegram.**
-- A **Claude Pro/Max** or **GitHub Copilot** subscription.
+- A **Claude Pro/Max**, **GitHub Copilot** or **Cursor** subscription.
 - An AI coding agent to do the installation for you: **Claude Code**, **Copilot CLI** or **Codex**.
 
 ## Install

@@ -5,7 +5,7 @@ optional parts work. Most people should install with Docker instead: see [INSTAL
 and [platforms and Docker](platforms.md). The big picture: [what Densemble does](overview.md) and
 [how it is built](concepts.md).
 
-Densemble is a local Telegram interface to managed Copilot and Claude Code agent runtimes. The
+Densemble is a local Telegram interface to managed Copilot, Claude Code and Cursor agent runtimes. The
 service owner can configure additional users for private chats and grant them access to personal
 or shared knowledge workspaces. One bot per persona, one binding per group/topic, and separate
 conversation histories. TypeScript/Node, grammY, SQLite and the Copilot SDK form a modular
@@ -180,29 +180,38 @@ cancel <id>` act on one item, or on the whole agent's proactivity when no id is
 given. Resuming a paused agent drops anything missed during the pause instead of
 firing a catch-up batch.
 
-## Engines: Claude Code and Copilot
+## Engines: Claude Code, Copilot and Cursor
 
 Every bot runs on **Claude Code**, using your Claude subscription, unless its entry
-says `"engine": "copilot"`; then it runs on your **GitHub Copilot** subscription. Both
-engines run side by side in one service, and one persona may be served by a
-Copilot bot and a Claude Code bot at the same time. The engine is chosen only in
+says `"engine": "copilot"` (GitHub Copilot) or `"engine": "cursor"` (Cursor). The
+three engines run side by side in one service, and one persona may be served by a
+bot of each engine at the same time. The engine is chosen only in
 `config.local.json` and takes effect on restart; it cannot be switched from Telegram.
 
 ```json
 "claudeCode": { "homePath": "./runtime/claude", "defaultModel": "claude-sonnet-5-5" },
+"cursor": { "homePath": "./runtime/cursor", "defaultModel": "composer-2.5" },
 "bots": [
   { "id": "alfred-bot", "agentId": "alfred", "tokenRef": "telegram.alfred",
     "model": "claude-opus-5-5" },
   { "id": "alfred-copilot-bot", "agentId": "alfred", "tokenRef": "telegram.alfred_copilot",
-    "engine": "copilot" }
+    "engine": "copilot" },
+  { "id": "alfred-cursor-bot", "agentId": "alfred", "tokenRef": "telegram.alfred_cursor",
+    "engine": "cursor" }
 ]
 ```
 
+`cursor.defaultModel` and a Cursor bot's `model` must be an id or alias the logged-in
+account lists. The string above is a shape example; `make doctor` checks the real
+catalog and never substitutes another model. Omit the `cursor` block entirely when
+no bot uses it.
+
 For Claude Code bots `model` is optional and falls back to `claudeCode.defaultModel`.
 An agent's own `model:` (launcher or `AGENT.md` frontmatter) is its Copilot model.
-`doctor` checks only the engines your bots use. `homePath` is the service-owned
-`CLAUDE_CONFIG_DIR`. It must be a private directory separate from
-`~/.claude`, the Copilot home, data, workspaces and secrets.
+A Cursor bot uses `bots[].model` or `cursor.defaultModel`, not that persona model.
+`doctor` checks only the engines your bots use. `claudeCode.homePath` is the
+service-owned `CLAUDE_CONFIG_DIR`. It must be a private directory separate from
+`~/.claude`, the Copilot home, the Cursor home, data, workspaces and secrets.
 
 One-time setup (pinned `@anthropic-ai/claude-agent-sdk@0.3.305`, which bundles
 Claude Code **2.1.305**; no global `claude` is used):
@@ -238,6 +247,93 @@ and sandbox escalation are denied. Differences from Copilot:
 Claude Code history lives in `<homePath>/projects/`. Deleting a session removes
 only its own transcript. `backup` does not yet include Claude Code history.
 
+## Cursor
+
+Cursor is a third runtime behind the same engine router as Copilot and Claude Code
+(`src/agents/cursor.ts`, `@cursor/sdk` 1.3.1). The service constructs it only when
+the `cursor` block is present. A new session stores `engine: "cursor"` and keeps
+that engine for its life; after you change the bot's engine, `/new` starts on the
+new one and no context moves across. The router sends every call by the stored
+engine, and the Cursor runtime refuses a Copilot or Claude session
+(`SESSION_ENGINE_MISMATCH`).
+
+One-time setup (no global `cursor` CLI is used):
+
+```sh
+mkdir -p runtime/cursor
+chmod 700 runtime/cursor
+npm ci
+make cursor-login        # browser login into cursor.homePath only
+make doctor              # cursor-authentication / cursor-models
+```
+
+Stop the service first: `make cursor-login` (`node dist/main.js login cursor`)
+takes the instance lock. It calls the SDK login and writes the minted key to
+`<cursor.homePath>/auth.json` under the name `densemble`. It does not read or
+write `~/.cursor`, does not copy the key into `secrets.local.json`, and does not
+honour `CURSOR_API_KEY`. Your interactive Cursor login stays separate. Subscription
+limits are shared with that interactive use. `homePath` must already exist, be
+private, and sit apart from the workspace, `~/.cursor`, `~/.claude`, the Copilot
+home, the Claude home, data, the config file and secrets. `doctor` checks Cursor
+only when a bot uses it: `cursor-authentication`, then `cursor-models`.
+
+A turn goes through the same application pipeline as the other engines. Opening
+the session calls `Agent.create`, or `Agent.resume` when the session already has
+a local agent id and history is kept. Only ids shaped `agent-…` are accepted.
+Cloud ids (`bc-…`) are refused (`UNOWNED_PROVIDER_SESSION`), so the workspace
+stays on this machine. Densemble stores that local agent id as the provider
+session id. The agent store is `<homePath>/agents/`.
+
+The first message of a conversation carries the persona (`AGENT.md`), the
+workspace `AGENTS.md`, the Telegram rules, linked workspaces, and the instructions
+for file export, proactivity and module abilities. Later turns send only the new
+user text. Other personas of the workspace are registered as Cursor subagents.
+`askQuestion` is disabled: a clarifying question is an ordinary chat message, one
+at a time. Photos (PNG, JPEG, WebP) are attached as images. `/model` changes the
+model of the next send on the same agent; the catalog is cached for five minutes.
+`/stop` cancels the run. An in-flight tool whose outcome is unknown is reported,
+not replayed.
+
+Project settings are not loaded (`settingSources` is empty), so a workspace
+`.cursor/hooks.json` or project MCP cannot attach extra host tools. Agent retries
+are off. Messages sent while an answer is running steer that answer, as on
+Copilot, when the run accepts the steer. Otherwise the bot says the clarification
+was not delivered and the text must be sent again after `/stop`.
+
+The owner's runs leave the SDK sandbox off: they act with the owner's rights on
+the machine, same as the other engines. A guest (anyone who is not the owner)
+runs sandboxed, with the working directory set to their workspace and linked
+workspaces passed as extra directories. One SDK limit applies to guests: if the
+account that runs the service has `~/.cursor/sandbox.json` and that file is
+anything other than `{ "type": "insecure_none" }`, the SDK would apply that
+personal policy instead of the workspace sandbox. The guest session is then
+refused (`CURSOR_SANDBOX_POLICY_CONFLICT`) until the file is removed or set to
+`insecure_none`. A missing file is fine. The owner's unsandboxed runs are not
+blocked by it.
+
+MCP cannot be narrowed to the configured tool list: the SDK would expose every
+tool of an allowlisted server. With `mcp.mode: "allowlist"` a Cursor session does
+not start (`MCP_TOOL_ALLOWLIST_REQUIRED`). Use `"none"`, or run that bot on
+Copilot or Claude Code. File export, proactivity and module abilities are
+Densemble tools passed into the SDK directly; they are not MCP.
+
+Two things the other engines wire up are absent here. Owner skills
+(`skillDirectories`) are not mounted; a skill file is visible only if the agent
+reads it in the workspace. `permissionMode` has no approval callback for Cursor's
+own tools, so `manual` does not ask in Telegram before a shell command or a file
+edit. Guests are limited by the sandbox above. Export, proactivity and module
+abilities still pass through the application.
+
+If Cursor is logged out, rate-limited or fails to start, that bot replies with
+the cause (`CURSOR_LOGIN_REQUIRED`, `CURSOR_USAGE_LIMIT`,
+`CURSOR_ENGINE_UNAVAILABLE`) and never falls back to another engine. Deleting a
+session looks up the cwd stored for that agent id and deletes only that agent.
+`persistSessions: false` never resumes: the next open deletes the previous local
+agent and the conversation starts over. An empty history does the same cleanup
+even when persistence is on. `backup` copies Copilot histories and service state,
+not the Cursor agent store; copying `cursor.homePath` itself keeps the login and
+the local agents.
+
 ## Local voice and media
 
 Documents: text PDF, DOCX, UTF-8 TXT/Markdown/CSV. Photos are PNG/JPEG/WebP;
@@ -265,7 +361,7 @@ paths (`vocabulary` hints and a Silero `vadModelPath` are optional):
 ```
 
 No automatic install/download occurs. Maximum actual duration is 600 seconds;
-voice stays local to ASR, then only the labelled transcript goes to Copilot.
+voice stays local to ASR, then only the labelled transcript goes to the engine.
 Raw voice/WAV are removed on success, failure and cancellation; inputs expire
 after seven days unless retained for active work/delivery. See the
 [media adapter](../src/media/README.md) and [Telegram adapter](../src/telegram/README.md).

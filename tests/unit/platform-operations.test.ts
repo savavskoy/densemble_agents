@@ -51,6 +51,7 @@ describe("login and service-unit arguments", () => {
   it("parses login with an engine and the config flag", () => {
     expect(parseArguments(["login", "copilot", "--config", "/c.json"])).toEqual({ command: "login", engine: "copilot", config: "/c.json" });
     expect(parseArguments(["login", "claude"], {})).toEqual({ command: "login", engine: "claude", config: "config.local.json" });
+    expect(parseArguments(["login", "cursor"], {})).toEqual({ command: "login", engine: "cursor", config: "config.local.json" });
     expect(() => parseArguments(["login"])).toThrow("LOGIN_ENGINE_REQUIRED");
     expect(() => parseArguments(["login", "--config", "/c.json"])).toThrow("LOGIN_ENGINE_REQUIRED");
     expect(() => parseArguments(["login", "codex"])).toThrow("LOGIN_ENGINE_REQUIRED");

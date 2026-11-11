@@ -23,6 +23,20 @@ describe("engine-aware application", () => {
     await until(() => f.commands.some((command) => command.kind === "send"));
     expect(f.store.sessions.current(scope)).toMatchObject({ engine: "copilot", appliedModel: "model-one" });
   });
+  it("creates Cursor sessions with the engine default or the bot's model", async () => {
+    const f = setup("copilot");
+    f.config.config.cursor = { homePath: f.root, defaultModel: "grok-4.7" };
+    f.config.config.bots[0] = { ...f.config.config.bots[0]!, engine: "cursor" };
+    await f.app.handle(f.message("Привіт"));
+    await until(() => f.commands.some((command) => command.kind === "send"));
+    expect(f.store.sessions.current(scope)).toMatchObject({ engine: "cursor", appliedModel: "grok-4.7" });
+    const g = setup("copilot");
+    g.config.config.cursor = { homePath: g.root, defaultModel: "grok-4.7" };
+    g.config.config.bots[0] = { ...g.config.config.bots[0]!, engine: "cursor", model: "composer-2.5" };
+    await g.app.handle(g.message("Привіт"));
+    await until(() => g.commands.some((command) => command.kind === "send"));
+    expect(g.store.sessions.current(scope)?.appliedModel).toBe("composer-2.5");
+  });
   it("creates Claude Code sessions with the engine default or the bot's model", async () => {
     const f = setup("claude-code");
     await f.app.handle(f.message("Привіт"));

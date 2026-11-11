@@ -15,7 +15,9 @@ export function createEngineRouter(options: EngineRouterOptions): ControlledRunt
   const opened = new Map<string, { sessionId: string; engine: EngineId }>();
   function runtimeFor(engine: EngineId): ControlledRuntime {
     const runtime = options.engines[engine];
-    if (!runtime) throw new RuntimeError(engine === "claude-code" ? "CLAUDE_CODE_NOT_CONFIGURED" : "ENGINE_NOT_CONFIGURED");
+    const missing = engine === "claude-code" ? "CLAUDE_CODE_NOT_CONFIGURED"
+      : engine === "cursor" ? "CURSOR_NOT_CONFIGURED" : "ENGINE_NOT_CONFIGURED";
+    if (!runtime) throw new RuntimeError(missing);
     return runtime;
   }
   function engineOf(scope: Scope, sessionId: string): EngineId | undefined {

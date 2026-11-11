@@ -72,8 +72,8 @@ export interface Conversation {
 }
 
 /** The agent runtime that owns a session; fixed when the session is created. */
-export type EngineId = "copilot" | "claude-code";
-export const engineIds: readonly EngineId[] = ["copilot", "claude-code"];
+export type EngineId = "copilot" | "claude-code" | "cursor";
+export const engineIds: readonly EngineId[] = ["copilot", "claude-code", "cursor"];
 
 export interface Session {
   id: string;

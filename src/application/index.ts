@@ -90,7 +90,7 @@ interface ProactiveBatchEntry {
   late: boolean;
 }
 
-const engineLabels: Record<Session["engine"], string> = { copilot: "Copilot", "claude-code": "Claude Code" };
+const engineLabels: Record<Session["engine"], string> = { copilot: "Copilot", "claude-code": "Claude Code", cursor: "Cursor" };
 const runLabels: Record<string, string> = {
   preparing: "підготовка вкладень", running: "працює", waiting: "очікує відповіді",
   cancelling: "зупиняється", succeeded: "завершено", failed: "помилка", cancelled: "зупинено", interrupted: "перервано",
@@ -174,9 +174,10 @@ export function createApplication(options: ApplicationOptions): Application {
     const path = workspace && workspaceAuthorized(scope, workspace) ? workspace : defaultSessionWorkspace(config.config, scope);
     // New sessions use the bot's current engine; existing sessions keep the engine they were created with.
     const engine = botEngine(config.config, scope.botId);
-    const engineDefault = engine === "claude-code" ? config.config.claudeCode?.defaultModel : agent.defaultModel;
+    const engineDefault = engine === "claude-code" ? config.config.claudeCode?.defaultModel
+      : engine === "cursor" ? config.config.cursor?.defaultModel : agent.defaultModel;
     const model = bot?.model ?? engineDefault;
-    if (!model) throw new RuntimeError("CLAUDE_CODE_NOT_CONFIGURED");
+    if (!model) throw new RuntimeError(engine === "cursor" ? "CURSOR_NOT_CONFIGURED" : "CLAUDE_CODE_NOT_CONFIGURED");
     return store.sessions.create(scope, { agentId: agent.id, workspace: path, model, engine });
   }
   function text(session: Session, value: string, key = opaqueId(), runId?: string): void {

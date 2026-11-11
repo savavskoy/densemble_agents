@@ -33,6 +33,7 @@ help:
 		'make modules-status  Show each module: enabled, state, cause and fix, status line' \
 		'make claude-login  Log the service-owned Claude Code home in with your Claude subscription' \
 		'make copilot-login Log the service-owned Copilot home in with your GitHub account' \
+		'make cursor-login  Log the service-owned Cursor home in with your Cursor subscription' \
 		'' \
 		'First background launch: make install && make start' \
 		'Stop any existing npm/foreground instance before starting via launchd.' \
@@ -65,6 +66,10 @@ claude-login: build
 
 copilot-login: build
 	$(NODE) dist/main.js login copilot --config "$(CONFIG)"
+
+# One-time, interactive: mints a Cursor key into cursor.homePath. It never reads or writes ~/.cursor.
+cursor-login: build
+	$(NODE) dist/main.js login cursor --config "$(CONFIG)"
 
 run: build
 	$(NODE) dist/main.js start --config "$(CONFIG)"

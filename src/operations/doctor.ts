@@ -8,6 +8,7 @@ import { bounded } from "../agents/contracts.js";
 import { audioSettings } from "./audio-settings.js";
 import { basename } from "node:path";
 import type { ClaudeHostFactory } from "../agents/claude.js";
+import { createCursorGateway, type CursorGateway } from "../agents/cursor.js";
 import { botEngine, moduleEntries } from "../config/index.js";
 import { SpeechGate } from "../media/speech-gate.js";
 import { createModuleHost } from "../modules/host.js";
@@ -106,6 +107,28 @@ async function claudeChecks(config: LoadedConfig, factory?: ClaudeHostFactory): 
   return checks;
 }
 
+/** Zero-inference Cursor readiness: service login under cursor.homePath and the configured models. */
+async function cursorChecks(config: LoadedConfig, gateway?: CursorGateway): Promise<DoctorReport["checks"]> {
+  const checks: DoctorReport["checks"] = [];
+  try {
+    const client = gateway ?? await createCursorGateway(config);
+    const authenticated = await client.authenticated();
+    checks.push({ component: "cursor-authentication", ready: authenticated,
+      code: authenticated ? "AUTHENTICATED" : "CURSOR_LOGIN_REQUIRED" });
+    if (authenticated) {
+      const catalog = await client.models();
+      const wanted = config.config.bots.filter((bot) => botEngine(config.config, bot.id) === "cursor")
+        .map((bot) => bot.model ?? config.config.cursor?.defaultModel ?? "");
+      const missing = wanted.filter((model) => !catalog.accepted.has(model));
+      checks.push({ component: "cursor-models", ready: missing.length === 0,
+        code: missing.length ? "AGENT_MODEL_UNAVAILABLE" : "MODELS_READY", count: catalog.models.length });
+    }
+  } catch {
+    checks.push({ component: "cursor-runtime", ready: false, code: "CURSOR_DIAGNOSTIC_FAILED" });
+  }
+  return checks;
+}
+
 /** Zero-inference Copilot readiness: pinned runtime, service login and every agent's default model. */
 async function copilotChecks(config: LoadedConfig): Promise<DoctorReport["checks"]> {
   const checks: DoctorReport["checks"] = [];
@@ -148,19 +171,23 @@ async function copilotChecks(config: LoadedConfig): Promise<DoctorReport["checks
   return checks;
 }
 
-export async function doctor(config: LoadedConfig, options: { claudeHost?: ClaudeHostFactory; moduleLoader?: ModuleLoader } = {}): Promise<DoctorReport> {
+export async function doctor(config: LoadedConfig, options: {
+  claudeHost?: ClaudeHostFactory; cursorGateway?: CursorGateway; moduleLoader?: ModuleLoader;
+} = {}): Promise<DoctorReport> {
   const checks: DoctorReport["checks"] = [];
   const platform = currentPlatform();
   // Reaching doctor means the platform, user and (in a container) state mounts already passed the start guards.
   checks.push({ component: "platform", ready: true, code: platform.container ? "PLATFORM_CONTAINER" : "PLATFORM_NATIVE" });
   for (const bot of config.config.bots) {
     const engine = botEngine(config.config, bot.id);
-    checks.push({ component: `bot-engine:${bot.id}`, ready: true, code: engine === "copilot" ? "ENGINE_COPILOT" : "ENGINE_CLAUDE_CODE" });
+    const code = engine === "copilot" ? "ENGINE_COPILOT" : engine === "cursor" ? "ENGINE_CURSOR" : "ENGINE_CLAUDE_CODE";
+    checks.push({ component: `bot-engine:${bot.id}`, ready: true, code });
   }
   // Only the engines that bots actually use are checked: a Claude-only setup needs no Copilot login, and vice versa.
   const engines = new Set(config.config.bots.map((bot) => botEngine(config.config, bot.id)));
   if (engines.has("copilot")) checks.push(...await copilotChecks(config));
   if (engines.has("claude-code")) checks.push(...await claudeChecks(config, options.claudeHost));
+  if (engines.has("cursor")) checks.push(...await cursorChecks(config, options.cursorGateway));
   for (const bot of config.config.bots) {
     try {
       const { Api } = await import("grammy");

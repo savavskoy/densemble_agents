@@ -46,7 +46,7 @@ describe("real SQLite migrations and scope isolation", () => {
     store.close();
     const raw = new Database(path);
     expect(raw.pragma("journal_mode", { simple: true })).toBe("wal");
-    expect(raw.pragma("user_version", { simple: true })).toBe(4);
+    expect(raw.pragma("user_version", { simple: true })).toBe(5);
     expect(raw.pragma("foreign_key_check")).toEqual([]);
     raw.close();
     store = openStore({ path });
@@ -494,6 +494,9 @@ describe("session engines", () => {
     const claude = store.sessions.create(scope, { agentId: "synthetic-agent", workspace: join(root, "workspace"),
       model: "claude-sonnet-5-5", engine: "claude-code" });
     expect(store.sessions.get(scope, claude.id)?.engine).toBe("claude-code");
+    const cursor = store.sessions.create(scope, { agentId: "synthetic-agent", workspace: join(root, "workspace"),
+      model: "grok-4.7", engine: "cursor" });
+    expect(store.sessions.get(scope, cursor.id)?.engine).toBe("cursor");
     expect(() => store.sessions.create(scope, { agentId: "synthetic-agent", workspace: join(root, "workspace"),
       model: "m", engine: "other" as "copilot" })).toThrow("INVALID_SESSION");
   });

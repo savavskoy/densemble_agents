@@ -20,7 +20,7 @@ product can do is in the [overview](overview.md); exact rules are in
 | **Scope** | One conversation place: owner or user, bot, chat and topic. Every scope has its own history. |
 | **Session** | One conversation in a scope: a persona, a workspace, a model and an engine. `/new` starts another. |
 | **Run (turn)** | One answer of the agent to one input, from the message to the final reply. |
-| **Engine** | What runs the model: Copilot (default) or Claude Code. Fixed per bot and per session. |
+| **Engine** | What runs the model: Claude Code (default), Copilot or Cursor. Fixed per bot and per session. |
 | **Module** | An optional feature in `src/modules/<id>/`, switched only in the configuration. |
 | **Ability** | A tool a module gives to the agents allowed in `modules.<id>.agents`. |
 | **Proactive item** | A reminder, check-in or silent check an agent schedules in its own chat. |
@@ -91,7 +91,7 @@ How this maps to the configuration today:
    known person, bound chat, exact topic. Anything else is ignored before any
    model, media or tool work.
 2. **Admission.** The input is stored in SQLite with deduplication; albums are
-   grouped. If a run is active, the input waits (or steers it, on Copilot).
+   grouped. If a run is active, the input waits (or steers it, on Copilot and Cursor).
 3. **Media.** Voice is transcribed locally; documents and photos are checked and
    prepared. Failures are reported, never sent to a cloud fallback.
 4. **Run.** The engine opens or resumes the session with the persona, the
@@ -136,6 +136,7 @@ operating-system boundary, and the Mac's account can read every workspace.
 | Incoming and outgoing files | `runtimeDataPath`; incoming files expire after at most seven days |
 | Conversation history, Copilot | `runtimeHomePath` (service-only Copilot home) |
 | Conversation history, Claude Code | `claudeCode.homePath/projects/`; none with `claudeCode.persistSessions: false` |
+| Conversation history, Cursor | `cursor.homePath/agents/` (local agents only); none with `cursor.persistSessions: false` |
 | Module data and state | `runtimeDataPath/modules/` |
 | Logs | fixed codes and scalar metadata only, beneath the data directory |
 | Agents, knowledge, current context | the workspaces; Densemble writes there only through agent tools and modules |
