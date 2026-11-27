@@ -1,0 +1,43 @@
+{
+  "detector": "v5: opener 4 words + marker, hold_tight on",
+  "gold": "IMG_1052",
+  "metrics": {
+    "recall_s": {
+      "covered": 0.0,
+      "gold": 37.08,
+      "share": 0.0
+    },
+    "expected_miss": {
+      "covered": 0.0,
+      "gold": 2.08,
+      "share": 0.0
+    },
+    "regression": {
+      "covered": 41.2,
+      "gold": 41.2,
+      "share": 1.0
+    },
+    "precision_s": {
+      "hit": 41.2,
+      "cut": 41.2,
+      "share": 1.0
+    },
+    "collateral_s": 0,
+    "unexplained_s": 0,
+    "cut_s": 41.2
+  },
+  "cuts": [
+    {
+      "start": 103.68,
+      "end": 111.18
+    },
+    {
+      "start": 168.35,
+      "end": 182.47
+    },
+    {
+      "start": 578.92,
+      "end": 606.24
+    }
+  ]
+}

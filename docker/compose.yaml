@@ -1,10 +1,18 @@
 # One isolated Densemble instance. The container sees only the mounts below — no home folder,
-# no Docker socket, no other host path. Guide: docs/platforms.md.
+# no Docker socket, no other host path — unless CAPCUT_PROJECTS_DIR or SOURCE_DIR_N is set.
+# Guide: docs/platforms.md.
 #
 #   DENSEMBLE_INSTANCE   folder with config.json, secrets.local.json and state/{data,copilot,claude,home}
 #   DENSEMBLE_WORKSPACES folder with one subfolder per workspace, seen as /workspaces/<name>
 #   DENSEMBLE_MODELS     speech models (read-only)
-#   DENSEMBLE_UID/GID   Linux hosts: your `id -u` / `id -g`, so files in the workspace stay yours
+#   DENSEMBLE_UID/GID    Linux hosts: your `id -u` / `id -g`, so files in the workspace stay yours
+#   CAPCUT_PROJECTS_DIR  optional CapCut drafts, read-write at /workspaces/capcut_projects
+#   SOURCE_DIR_1..3      optional absolute host paths, mounted at that same path (read-only)
+#   WHISPER_MODEL_DIR    faster-whisper download root inside the container (default /state/models/whisper)
+#   WHISPER_MODEL        model name (default medium)
+#
+# Rough-cut job files go to /state/jobs/<name>/ on the state mount.
+# One-time venv and model download: see docker/.env.example. Later runs stay offline.
 #
 # Put these in docker/.env (ignored by git) or export them, then from the repository root:
 #   docker compose -f docker/compose.yaml run --rm densemble login copilot
@@ -30,9 +38,44 @@ services:
       - no-new-privileges:true
     stdin_open: true
     tty: true
+    environment:
+      WHISPER_MODEL: ${WHISPER_MODEL:-medium}
+      WHISPER_MODEL_DIR: ${WHISPER_MODEL_DIR:-/state/models/whisper}
     volumes:
       - ${DENSEMBLE_INSTANCE:?set DENSEMBLE_INSTANCE}/config.json:/config/config.json:ro
       - ${DENSEMBLE_INSTANCE:?set DENSEMBLE_INSTANCE}/secrets.local.json:/config/secrets.local.json:ro
       - ${DENSEMBLE_INSTANCE:?set DENSEMBLE_INSTANCE}/state:/state
       - ${DENSEMBLE_MODELS:?set DENSEMBLE_MODELS}:/models:ro
       - ${DENSEMBLE_WORKSPACES:?set DENSEMBLE_WORKSPACES}:/workspaces
+      # Long syntax so a macOS path with spaces (CapCut's "User Data") survives interpolation.
+      # Unset vars bind docker/empty, so `up` still starts.
+      - type: bind
+        source: ${CAPCUT_PROJECTS_DIR:-./empty}
+        target: /workspaces/capcut_projects
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${SOURCE_DIR_1:-./empty}
+        target: ${SOURCE_DIR_1:-/sources/unused-1}
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${SOURCE_DIR_2:-./empty}
+        target: ${SOURCE_DIR_2:-/sources/unused-2}
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${SOURCE_DIR_3:-./empty}
+        target: ${SOURCE_DIR_3:-/sources/unused-3}
+        read_only: true
+        bind:
+          create_host_path: false
+      # Live rough-cut skill (no symlinks inside the workspace — Densemble rejects them).
+      - type: bind
+        source: ${ROUGH_CUT_SKILL:-./empty}
+        target: /workspaces/personal/agent/skills/rough-cut
+        read_only: true
+        bind:
+          create_host_path: false

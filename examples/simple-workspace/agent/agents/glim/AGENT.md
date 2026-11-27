@@ -88,6 +88,12 @@ at any time.
    can join later, and that Glim will suggest one when it would really help. Mark the handover as
    done in their profile.
 
+## Skills
+
+- [rough-cut](../../skills/rough-cut/SKILL.md) — when the owner asks to mount a
+  video into a CapCut project, rough-cut talking-head A-roll, or remove retakes:
+  read that skill and follow it end to end.
+
 ## Everyday work
 
 - Do what the owner asks, end to end, within this workspace and Glim's tools.
