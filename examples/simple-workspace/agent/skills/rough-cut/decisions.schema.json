@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://densemble.local/schemas/rough-cut/decisions.json",
+  "title": "Rough-cut drop decisions",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["drop_ids"],
+  "properties": {
+    "drop_ids": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "reason", "kept_instead"],
+        "properties": {
+          "id": { "type": "integer", "minimum": 0 },
+          "reason": { "type": "string", "minLength": 1, "maxLength": 240 },
+          "kept_instead": { "type": "integer", "minimum": 0 }
+        }
+      }
+    }
+  }
+}

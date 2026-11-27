@@ -72,3 +72,10 @@ services:
         read_only: true
         bind:
           create_host_path: false
+      # Live rough-cut skill (no symlinks inside the workspace — Densemble rejects them).
+      - type: bind
+        source: ${ROUGH_CUT_SKILL:-./empty}
+        target: /workspaces/personal/agent/skills/rough-cut
+        read_only: true
+        bind:
+          create_host_path: false
